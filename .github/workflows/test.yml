@@ -2,9 +2,9 @@ name: Vesting Smart Contract Tests
 
 on:
   push:
-    branches: [ "main", "issue-18-invariant-tests-clean" ]
+    branches: [ "main", "issue-17-lazy-storage-optimization", "issue-18-invariant-tests-clean" ]
   pull_request:
-    branches: [ "main", "issue-18-invariant-tests-clean" ]
+    branches: [ "main", "issue-17-lazy-storage-optimization", "issue-18-invariant-tests-clean" ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -36,10 +36,23 @@ jobs:
           wget https://github.com/stellar/stellar-cli/releases/download/v25.1.0/stellar-cli-25.1.0-x86_64-unknown-linux-gnu.tar.gz
           tar -xzf stellar-cli-25.1.0-x86_64-unknown-linux-gnu.tar.gz
           ls -la stellar-cli-25.1.0-x86_64-unknown-linux-gnu/
-          sudo mv stellar-cli-25.1.0-x86_64-unknown-linux-gnu/stellar /usr/local/bin/
-          sudo chmod +x /usr/local/bin/stellar
-          which stellar
-          stellar --version
+          # Find the actual binary name (might be stellar or stellar-cli)
+          if [ -f "stellar-cli-25.1.0-x86_64-unknown-linux-gnu/stellar" ]; then
+            sudo mv stellar-cli-25.1.0-x86_64-unknown-linux-gnu/stellar /usr/local/bin/
+            sudo chmod +x /usr/local/bin/stellar
+            echo "Using 'stellar' binary"
+          elif [ -f "stellar-cli-25.1.0-x86_64-unknown-linux-gnu/stellar-cli" ]; then
+            sudo mv stellar-cli-25.1.0-x86_64-unknown-linux-gnu/stellar-cli /usr/local/bin/
+            sudo chmod +x /usr/local/bin/stellar-cli
+            echo "Using 'stellar-cli' binary"
+          else
+            echo "Error: Could not find stellar binary in extracted directory"
+            ls -la stellar-cli-25.1.0-x86_64-unknown-linux-gnu/
+            exit 1
+          fi
+          # Test the installation
+          which stellar || which stellar-cli
+          (stellar --version 2>/dev/null || stellar-cli --version) || echo "Binary not found in PATH"
 
       - name: Build Contract
         run: cargo build --target wasm32-unknown-unknown --release
