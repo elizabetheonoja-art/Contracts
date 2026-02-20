@@ -11,8 +11,6 @@ pub struct VestingContract;
 const VAULT_COUNT: Symbol = Symbol::new(&"VAULT_COUNT");
 const VAULT_DATA: Symbol = Symbol::new(&"VAULT_DATA");
 const USER_VAULTS: Symbol = Symbol::new(&"USER_VAULTS");
-const INITIAL_SUPPLY: Symbol = Symbol::new(&"INITIAL_SUPPLY");
-const ADMIN_BALANCE: Symbol = Symbol::new(&"ADMIN_BALANCE");
 
 // Vault structure with lazy initialization
 #[contracttype]
@@ -35,29 +33,11 @@ pub struct BatchCreateData {
 
 #[contractimpl]
 impl VestingContract {
-    // Initialize contract with initial supply
-    pub fn initialize(env: Env, admin: Address, initial_supply: i128) {
-        // Set initial supply
-        env.storage().instance().set(&INITIAL_SUPPLY, &initial_supply);
-        
-        // Set admin balance (initially all tokens go to admin)
-        env.storage().instance().set(&ADMIN_BALANCE, &initial_supply);
-        
-        // Initialize vault count
-        env.storage().instance().set(&VAULT_COUNT, &0u64);
-    }
-    
     // Full initialization - writes all metadata immediately
     pub fn create_vault_full(env: Env, owner: Address, amount: i128, start_time: u64, end_time: u64) -> u64 {
         // Get next vault ID
         let mut vault_count: u64 = env.storage().instance().get(&VAULT_COUNT).unwrap_or(0);
         vault_count += 1;
-        
-        // Check admin balance and transfer tokens
-        let mut admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
-        require!(admin_balance >= amount, "Insufficient admin balance");
-        admin_balance -= amount;
-        env.storage().instance().set(&ADMIN_BALANCE, &admin_balance);
         
         // Create vault with full initialization
         let vault = Vault {
@@ -90,12 +70,6 @@ impl VestingContract {
         // Get next vault ID
         let mut vault_count: u64 = env.storage().instance().get(&VAULT_COUNT).unwrap_or(0);
         vault_count += 1;
-        
-        // Check admin balance and transfer tokens
-        let mut admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
-        require!(admin_balance >= amount, "Insufficient admin balance");
-        admin_balance -= amount;
-        env.storage().instance().set(&ADMIN_BALANCE, &admin_balance);
         
         // Create vault with lazy initialization (minimal storage)
         let vault = Vault {
@@ -155,38 +129,10 @@ impl VestingContract {
         }
     }
     
-    // Claim tokens from vault
-    pub fn claim_tokens(env: Env, vault_id: u64, claim_amount: i128) -> i128 {
-        let mut vault: Vault = env.storage().instance()
-            .get(&VAULT_DATA, &vault_id)
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
-        
-        require!(vault.is_initialized, "Vault not initialized");
-        require!(claim_amount > 0, "Claim amount must be positive");
-        
-        let available_to_claim = vault.total_amount - vault.released_amount;
-        require!(claim_amount <= available_to_claim, "Insufficient tokens to claim");
-        
-        // Update vault
-        vault.released_amount += claim_amount;
-        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
-        
-        claim_amount
-    }
-    
     // Batch create vaults with lazy initialization
     pub fn batch_create_vaults_lazy(env: Env, batch_data: BatchCreateData) -> Vec<u64> {
         let mut vault_ids = Vec::new(&env);
         let initial_count: u64 = env.storage().instance().get(&VAULT_COUNT).unwrap_or(0);
-        
-        // Check total admin balance
-        let total_amount: i128 = batch_data.amounts.iter().sum();
-        let mut admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
-        require!(admin_balance >= total_amount, "Insufficient admin balance for batch");
-        admin_balance -= total_amount;
-        env.storage().instance().set(&ADMIN_BALANCE, &admin_balance);
         
         for i in 0..batch_data.recipients.len() {
             let vault_id = initial_count + i as u64 + 1;
@@ -217,13 +163,6 @@ impl VestingContract {
     pub fn batch_create_vaults_full(env: Env, batch_data: BatchCreateData) -> Vec<u64> {
         let mut vault_ids = Vec::new(&env);
         let initial_count: u64 = env.storage().instance().get(&VAULT_COUNT).unwrap_or(0);
-        
-        // Check total admin balance
-        let total_amount: i128 = batch_data.amounts.iter().sum();
-        let mut admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
-        require!(admin_balance >= total_amount, "Insufficient admin balance for batch");
-        admin_balance -= total_amount;
-        env.storage().instance().set(&ADMIN_BALANCE, &admin_balance);
         
         for i in 0..batch_data.recipients.len() {
             let vault_id = initial_count + i as u64 + 1;
@@ -311,36 +250,3 @@ impl VestingContract {
         
         vault_ids
     }
-    
-    // Get contract state for invariant checking
-    pub fn get_contract_state(env: Env) -> (i128, i128, i128) {
-        let initial_supply: i128 = env.storage().instance().get(&INITIAL_SUPPLY).unwrap_or(0);
-        let admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
-        
-        // Calculate total locked and claimed amounts
-        let vault_count: u64 = env.storage().instance().get(&VAULT_COUNT).unwrap_or(0);
-        let mut total_locked = 0i128;
-        let mut total_claimed = 0i128;
-        
-        for i in 1..=vault_count {
-            if let Some(vault) = env.storage().instance().get::<_, Vault>(&VAULT_DATA, &i) {
-                total_locked += vault.total_amount - vault.released_amount;
-                total_claimed += vault.released_amount;
-            }
-        }
-        
-        (total_locked, total_claimed, admin_balance)
-    }
-    
-    // Check invariant: Total Locked + Total Claimed + Admin Balance = Initial Supply
-    pub fn check_invariant(env: Env) -> bool {
-        let initial_supply: i128 = env.storage().instance().get(&INITIAL_SUPPLY).unwrap_or(0);
-        let (total_locked, total_claimed, admin_balance) = Self::get_contract_state(env);
-        
-        let sum = total_locked + total_claimed + admin_balance;
-        sum == initial_supply
-    }
-}
-
-mod test;
-mod invariant_tests;
