@@ -250,6 +250,3 @@ impl VestingContract {
         
         vault_ids
     }
-}
-
-mod test;
