@@ -168,6 +168,65 @@ fn test_timestamp_math_no_overflow() {
 }
 
 #[test]
+fn test_cliff_one_second_before() {
+    let env = Env::default();
+    let contract_id = env.register(GrantContract, ());
+    let client = GrantContractClient::new(&env, &contract_id);
+
+    let recipient = Address::generate(&env);
+    let total_amount = U256::from_u64(1000);
+    let duration = 100u64;
+
+    let start_time = env.ledger().timestamp();
+    client.initialize_grant(&recipient, &total_amount, &duration);
+
+    env.ledger().set_timestamp(start_time - 1);
+
+    let claimable = client.claimable_balance();
+    assert_eq!(claimable, U256::from_u64(0));
+}
+
+#[test]
+fn test_cliff_exact_second() {
+    let env = Env::default();
+    let contract_id = env.register(GrantContract, ());
+    let client = GrantContractClient::new(&env, &contract_id);
+
+    let recipient = Address::generate(&env);
+    let total_amount = U256::from_u64(1000);
+    let duration = 100u64;
+
+    let start_time = env.ledger().timestamp();
+    client.initialize_grant(&recipient, &total_amount, &duration);
+
+    env.ledger().set_timestamp(start_time);
+
+    let claimable = client.claimable_balance();
+    assert_eq!(claimable, U256::from_u64(0));
+}
+
+#[test]
+fn test_cliff_one_second_after() {
+    let env = Env::default();
+    let contract_id = env.register(GrantContract, ());
+    let client = GrantContractClient::new(&env, &contract_id);
+
+    let recipient = Address::generate(&env);
+    let total_amount = U256::from_u64(1000);
+    let duration = 100u64;
+
+    let start_time = env.ledger().timestamp();
+    client.initialize_grant(&recipient, &total_amount, &duration);
+
+    env.ledger().set_timestamp(start_time + 1);
+
+    let claimable = client.claimable_balance();
+    let expected = total_amount * U256::from_u64(1) / U256::from_u64(duration);
+    assert_eq!(claimable, expected);
+    assert!(claimable > U256::from_u64(0));
+}
+
+#[test]
 fn test_grant_info_function() {
     let env = Env::default();
     let contract_id = env.register(GrantContract, ());
