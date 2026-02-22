@@ -28,6 +28,7 @@ pub struct Vault {
     pub start_time: u64,
     pub end_time: u64,
     pub is_initialized: bool, // Lazy initialization flag
+    pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
 }
 
 #[contracttype]
@@ -135,6 +136,7 @@ impl VestingContract {
             start_time,
             end_time,
             is_initialized: true, // Mark as fully initialized
+            is_irrevocable: false, // Default to revocable
         };
         
         // Store vault data immediately (expensive gas usage)
@@ -187,6 +189,7 @@ impl VestingContract {
             start_time,
             end_time,
             is_initialized: false, // Mark as lazy initialized
+            is_irrevocable: false, // Default to revocable
         };
         
         // Store only essential data initially (cheaper gas)
@@ -226,6 +229,7 @@ impl VestingContract {
                     start_time: 0,
                     end_time: 0,
                     is_initialized: false,
+                    is_irrevocable: false,
                 }
             });
         
@@ -341,6 +345,7 @@ impl VestingContract {
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 is_initialized: false, // Lazy initialization
+                is_irrevocable: false, // Default to revocable
             };
             
             // Store vault data (minimal writes)
@@ -392,6 +397,7 @@ impl VestingContract {
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 is_initialized: true, // Full initialization
+                is_irrevocable: false, // Default to revocable
             };
             
             // Store vault data (expensive writes)
@@ -438,6 +444,7 @@ impl VestingContract {
                     start_time: 0,
                     end_time: 0,
                     is_initialized: false,
+                    is_irrevocable: false,
                 }
             });
         
@@ -469,6 +476,7 @@ impl VestingContract {
                         start_time: 0,
                         end_time: 0,
                         is_initialized: false,
+                        is_irrevocable: false,
                     }
                 });
             
@@ -489,6 +497,9 @@ impl VestingContract {
             .unwrap_or_else(|| {
                 panic!("Vault not found");
             });
+        
+        // Security check: Cannot revoke from irrevocable vaults
+        require!(!vault.is_irrevocable, "Vault is irrevocable");
         
         // Calculate amount to return (unreleased tokens)
         let unreleased_amount = vault.total_amount - vault.released_amount;
@@ -525,6 +536,9 @@ impl VestingContract {
                 panic!("Vault not found");
             });
         
+        // Security check: Cannot revoke from irrevocable vaults
+        require!(!vault.is_irrevocable, "Vault is irrevocable");
+        
         // Calculate unvested balance (tokens not yet released)
         let unvested_balance = vault.total_amount - vault.released_amount;
         require!(amount > 0, "Amount to revoke must be positive");
@@ -549,6 +563,42 @@ impl VestingContract {
         );
         
         amount
+    }
+    
+    // Mark a vault as irrevocable to prevent admin withdrawal
+    pub fn mark_irrevocable(env: Env, vault_id: u64) {
+        Self::require_admin(&env);
+        
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        // Cannot mark already irrevocable vaults
+        require!(!vault.is_irrevocable, "Vault is already irrevocable");
+        
+        // Mark vault as irrevocable
+        vault.is_irrevocable = true;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+        
+        // Emit IrrevocableMarked event
+        let timestamp = env.ledger().timestamp();
+        env.events().publish(
+            (Symbol::new(&env, "IrrevocableMarked"), vault_id),
+            (timestamp),
+        );
+    }
+    
+    // Check if a vault is irrevocable
+    pub fn is_vault_irrevocable(env: Env, vault_id: u64) -> bool {
+        let vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        vault.is_irrevocable
     }
     
     // Get contract state for invariant checking
