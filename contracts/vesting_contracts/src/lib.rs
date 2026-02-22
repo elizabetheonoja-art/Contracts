@@ -4,6 +4,9 @@ use soroban_sdk::{
     token, IntoVal, TryFromVal, try_from_val, ConversionError
 };
 
+mod factory;
+pub use factory::{VestingFactory, VestingFactoryClient};
+
 #[contract]
 pub struct VestingContract;
 
