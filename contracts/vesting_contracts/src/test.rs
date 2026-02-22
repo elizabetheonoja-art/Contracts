@@ -347,6 +347,150 @@ fn test_transfer_beneficiary_nonexistent_vault() {
     assert!(result.is_err());
 }
 
+#[test]
+fn test_revoke_partial_tokens() {
+    let env = Env::default();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    // Create addresses for testing
+    let admin = Address::generate(&env);
+    let vault_owner = Address::generate(&env);
+    let unauthorized_user = Address::generate(&env);
+    
+    // Initialize contract with admin
+    let initial_supply = 1000000i128;
+    client.initialize(&admin, &initial_supply);
+    
+    // Create a vault
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    
+    let vault_amount = 1000i128;
+    let vault_id = client.create_vault_full(&vault_owner, &vault_amount, &100u64, &200u64);
+    
+    // Test: Unauthorized user cannot revoke partial tokens
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&unauthorized_user);
+    });
+    
+    let result = std::panic::catch_unwind(|| {
+        client.revoke_partial(&vault_id, &100i128);
+    });
+    assert!(result.is_err());
+    
+    // Test: Admin can revoke partial tokens
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    
+    let partial_amount = 300i128;
+    let revoked_amount = client.revoke_partial(&vault_id, &partial_amount);
+    assert_eq!(revoked_amount, partial_amount);
+    
+    // Verify vault state after partial revocation
+    let vault = client.get_vault(&vault_id);
+    assert_eq!(vault.released_amount, partial_amount);
+    assert_eq!(vault.total_amount, vault_amount);
+    assert_eq!(vault.total_amount - vault.released_amount, vault_amount - partial_amount); // Remaining unvested
+    
+    // Test: Can revoke more tokens (but not more than available)
+    let additional_amount = 400i128;
+    let total_revoked_expected = partial_amount + additional_amount;
+    let additional_revoked = client.revoke_partial(&vault_id, &additional_amount);
+    assert_eq!(additional_revoked, additional_amount);
+    
+    // Verify final vault state
+    let final_vault = client.get_vault(&vault_id);
+    assert_eq!(final_vault.released_amount, total_revoked_expected);
+}
+
+#[test]
+fn test_revoke_partial_invalid_amounts() {
+    let env = Env::default();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    // Create addresses for testing
+    let admin = Address::generate(&env);
+    let vault_owner = Address::generate(&env);
+    
+    // Initialize contract with admin
+    let initial_supply = 1000000i128;
+    client.initialize(&admin, &initial_supply);
+    
+    // Create a vault
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    
+    let vault_amount = 1000i128;
+    let vault_id = client.create_vault_full(&vault_owner, &vault_amount, &100u64, &200u64);
+    
+    // Test: Cannot revoke zero amount
+    let result = std::panic::catch_unwind(|| {
+        client.revoke_partial(&vault_id, &0i128);
+    });
+    assert!(result.is_err());
+    
+    // Test: Cannot revoke negative amount
+    let result = std::panic::catch_unwind(|| {
+        client.revoke_partial(&vault_id, &(-100i128));
+    });
+    assert!(result.is_err());
+    
+    // Test: Cannot revoke more than unvested balance
+    let result = std::panic::catch_unwind(|| {
+        client.revoke_partial(&vault_id, &(vault_amount + 1i128));
+    });
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_revoke_partial_with_claims() {
+    let env = Env::default();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    // Create addresses for testing
+    let admin = Address::generate(&env);
+    let vault_owner = Address::generate(&env);
+    
+    // Initialize contract with admin
+    let initial_supply = 1000000i128;
+    client.initialize(&admin, &initial_supply);
+    
+    // Create a vault
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    
+    let vault_amount = 1000i128;
+    let vault_id = client.create_vault_full(&vault_owner, &vault_amount, &100u64, &200u64);
+    
+    // Claim some tokens first
+    let claim_amount = 200i128;
+    let claimed = client.claim_tokens(&vault_id, &claim_amount);
+    assert_eq!(claimed, claim_amount);
+    
+    // Verify state after claim
+    let vault_after_claim = client.get_vault(&vault_id);
+    assert_eq!(vault_after_claim.released_amount, claim_amount);
+    
+    // Now partially revoke some of the remaining unvested tokens
+    let remaining_unvested = vault_amount - claim_amount; // 800 tokens
+    let revoke_amount = 300i128; // Less than remaining unvested
+    let revoked = client.revoke_partial(&vault_id, &revoke_amount);
+    assert_eq!(revoked, revoke_amount);
+    
+    // Verify final state
+    let final_vault = client.get_vault(&vault_id);
+    let expected_released = claim_amount + revoke_amount; // 200 + 300 = 500
+    assert_eq!(final_vault.released_amount, expected_released);
+    assert_eq!(final_vault.total_amount, vault_amount);
+}
+
 // -------------------------------------------------------------------------
 // Additional beneficiary-transfer tests added for coverage
 // -------------------------------------------------------------------------
