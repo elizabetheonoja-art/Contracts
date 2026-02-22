@@ -549,6 +549,121 @@ fn test_usdc_integration_mock_token() {
     assert_eq!(updated_vault.released_amount, claimable);
 }
 
+#[test]
+fn test_irrevocable_vault_security() {
+    let env = Env::default();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    // Create addresses for testing
+    let admin = Address::generate(&env);
+    let vault_owner = Address::generate(&env);
+    let unauthorized_user = Address::generate(&env);
+    
+    // Initialize contract with admin
+    let initial_supply = 1000000i128;
+    client.initialize(&admin, &initial_supply);
+    
+    // Create a vault
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    
+    let vault_amount = 1000i128;
+    let vault_id = client.create_vault_full(&vault_owner, &vault_amount, &100u64, &200u64);
+    
+    // Verify vault is initially revocable
+    assert_eq!(client.is_vault_irrevocable(&vault_id), false);
+    
+    // Test: Unauthorized user cannot mark vault as irrevocable
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&unauthorized_user);
+    });
+    
+    let result = std::panic::catch_unwind(|| {
+        client.mark_irrevocable(&vault_id);
+    });
+    assert!(result.is_err());
+    
+    // Test: Admin can mark vault as irrevocable
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    
+    client.mark_irrevocable(&vault_id);
+    
+    // Verify vault is now irrevocable
+    assert_eq!(client.is_vault_irrevocable(&vault_id), true);
+    
+    // Test: Cannot mark already irrevocable vault
+    let result = std::panic::catch_unwind(|| {
+        client.mark_irrevocable(&vault_id);
+    });
+    assert!(result.is_err());
+    
+    // Test: Admin cannot revoke tokens from irrevocable vault (full revocation)
+    let result = std::panic::catch_unwind(|| {
+        client.revoke_tokens(&vault_id);
+    });
+    assert!(result.is_err());
+    
+    // Test: Admin cannot revoke partial tokens from irrevocable vault
+    let result = std::panic::catch_unwind(|| {
+        client.revoke_partial(&vault_id, &100i128);
+    });
+    assert!(result.is_err());
+    
+    // Verify the vault state remains unchanged
+    let vault = client.get_vault(&vault_id);
+    assert_eq!(vault.released_amount, 0);
+    assert_eq!(vault.total_amount, vault_amount);
+    assert_eq!(vault.is_irrevocable, true);
+}
+
+#[test]
+fn test_irrevocable_vault_with_claims() {
+    let env = Env::default();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    // Create addresses for testing
+    let admin = Address::generate(&env);
+    let vault_owner = Address::generate(&env);
+    
+    // Initialize contract with admin
+    let initial_supply = 1000000i128;
+    client.initialize(&admin, &initial_supply);
+    
+    // Create a vault
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    
+    let vault_amount = 1000i128;
+    let vault_id = client.create_vault_full(&vault_owner, &vault_amount, &100u64, &200u64);
+    
+    // Mark vault as irrevocable
+    client.mark_irrevocable(&vault_id);
+    
+    // Beneficiary can still claim tokens from irrevocable vault
+    env.ledger().set_timestamp(150); // Halfway through vesting period
+    
+    let claimable_amount = vault_amount / 2; // 500 tokens should be claimable
+    let claimed = client.claim_tokens(&vault_id, &claimable_amount);
+    assert_eq!(claimed, claimable_amount);
+    
+    // Verify vault state after claim
+    let vault = client.get_vault(&vault_id);
+    assert_eq!(vault.released_amount, claimable_amount);
+    assert_eq!(vault.is_irrevocable, true);
+    
+    // Admin still cannot revoke even after claims
+    let result = std::panic::catch_unwind(|| {
+        client.revoke_partial(&vault_id, &100i128);
+    });
+    assert!(result.is_err());
+}
+
 // -------------------------------------------------------------------------
 // Additional beneficiary-transfer tests added for coverage
 // -------------------------------------------------------------------------
