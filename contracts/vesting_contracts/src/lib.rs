@@ -512,6 +512,42 @@ impl VestingContract {
         unreleased_amount
     }
     
+    // Revoke a specific amount of tokens from a vault and return them to admin
+    pub fn revoke_partial(env: Env, vault_id: u64, amount: i128) -> i128 {
+        Self::require_admin(&env);
+        
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        // Calculate unvested balance (tokens not yet released)
+        let unvested_balance = vault.total_amount - vault.released_amount;
+        require!(amount > 0, "Amount to revoke must be positive");
+        require!(amount <= unvested_balance, "Amount exceeds unvested balance");
+        
+        // Update vault to increase released amount by the specified amount
+        vault.released_amount += amount;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+        
+        // Return tokens to admin balance
+        let mut admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
+        admin_balance += amount;
+        env.storage().instance().set(&ADMIN_BALANCE, &admin_balance);
+        
+        // Get current timestamp
+        let timestamp = env.ledger().timestamp();
+        
+        // Emit TokensRevoked event
+        env.events().publish(
+            (Symbol::new(&env, "TokensRevoked"), vault_id),
+            (amount, timestamp),
+        );
+        
+        amount
+    }
+    
     // Get contract state for invariant checking
     pub fn get_contract_state(env: Env) -> (i128, i128, i128) {
         let initial_supply: i128 = env.storage().instance().get(&INITIAL_SUPPLY).unwrap_or(0);
