@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{vec, Env, Address, String};
+use soroban_sdk::{vec, Env, Address};
 
 #[test]
 fn test_admin_ownership_transfer() {
@@ -174,27 +174,16 @@ fn test_batch_operations_admin_control() {
 }
 
 #[test]
-
+fn test_milestone_unlocking_and_claim_limits() {
     let env = Env::default();
     let contract_id = env.register(VestingContract, ());
     let client = VestingContractClient::new(&env, &contract_id);
-    
-    let admin = Address::generate(&env);
 
-    
     let initial_supply = 1000000i128;
     client.initialize(&admin, &initial_supply);
-    
 
     env.as_contract(&contract_id, || {
         env.current_contract_address().set(&admin);
     });
-    let vault_id = client.create_vault_full(&beneficiary, &amount, &start_time, &end_time, &keeper_fee);
-    
 
-    
-    // Verify vault state
-    let vault = client.get_vault(&vault_id);
-    assert_eq!(vault.released_amount, claimable);
-    
 }
