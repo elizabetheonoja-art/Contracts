@@ -25,6 +25,7 @@ pub struct Vault {
     pub start_time: u64,
     pub end_time: u64,
     pub is_initialized: bool, // Lazy initialization flag
+    pub is_revocable: bool,   // Whether the vesting can be revoked by admin
 }
 
 #[contracttype]
@@ -38,7 +39,9 @@ pub struct BatchCreateData {
 #[contracttype]
 pub struct TokensRevoked {
     pub vault_id: u64,
-    pub amount_returned_to_admin: i128,
+    pub vested_amount: i128,
+    pub unvested_amount: i128,
+    pub beneficiary: Address,
     pub timestamp: u64,
 }
 
@@ -111,7 +114,7 @@ impl VestingContract {
     }
     
     // Full initialization - writes all metadata immediately
-    pub fn create_vault_full(env: Env, owner: Address, amount: i128, start_time: u64, end_time: u64) -> u64 {
+    pub fn create_vault_full(env: Env, owner: Address, amount: i128, start_time: u64, end_time: u64, is_revocable: bool) -> u64 {
         Self::require_admin(&env);
         
         // Get next vault ID
@@ -132,6 +135,7 @@ impl VestingContract {
             start_time,
             end_time,
             is_initialized: true, // Mark as fully initialized
+            is_revocable,
         };
         
         // Store vault data immediately (expensive gas usage)
@@ -163,7 +167,7 @@ impl VestingContract {
     }
     
     // Lazy initialization - writes minimal data initially
-    pub fn create_vault_lazy(env: Env, owner: Address, amount: i128, start_time: u64, end_time: u64) -> u64 {
+    pub fn create_vault_lazy(env: Env, owner: Address, amount: i128, start_time: u64, end_time: u64, is_revocable: bool) -> u64 {
         Self::require_admin(&env);
         
         // Get next vault ID
@@ -184,6 +188,7 @@ impl VestingContract {
             start_time,
             end_time,
             is_initialized: false, // Mark as lazy initialized
+            is_revocable,
         };
         
         // Store only essential data initially (cheaper gas)
@@ -223,6 +228,7 @@ impl VestingContract {
                     start_time: 0,
                     end_time: 0,
                     is_initialized: false,
+                    is_revocable: false,
                 }
             });
         
@@ -245,6 +251,33 @@ impl VestingContract {
         } else {
             false // Already initialized
         }
+    }
+    
+    // Helper function to calculate vested amount based on current time
+    fn calculate_vested_amount(env: &Env, vault: &Vault) -> i128 {
+        let now = env.ledger().timestamp();
+        
+        // If before start time, nothing is vested
+        if now <= vault.start_time {
+            return 0i128;
+        }
+        
+        // If after end time, everything is vested
+        if now >= vault.end_time {
+            return vault.total_amount;
+        }
+        
+        // Calculate linear vesting between start and end time
+        let total_duration = vault.end_time - vault.start_time;
+        let elapsed = now - vault.start_time;
+        
+        // Use i128 for calculation to avoid overflow
+        let total_amount = vault.total_amount;
+        let elapsed_i128 = elapsed as i128;
+        let total_duration_i128 = total_duration as i128;
+        
+        // Linear interpolation: vested = total * elapsed / total_duration
+        (total_amount * elapsed_i128) / total_duration_i128
     }
     
     // Claim tokens from vault
@@ -338,6 +371,7 @@ impl VestingContract {
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 is_initialized: false, // Lazy initialization
+                is_revocable: true,    // Default to revocable for batch operations
             };
             
             // Store vault data (minimal writes)
@@ -389,6 +423,7 @@ impl VestingContract {
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 is_initialized: true, // Full initialization
+                is_revocable: true,   // Default to revocable for batch operations
             };
             
             // Store vault data (expensive writes)
@@ -435,6 +470,7 @@ impl VestingContract {
                     start_time: 0,
                     end_time: 0,
                     is_initialized: false,
+                    is_revocable: false,
                 }
             });
         
@@ -466,6 +502,7 @@ impl VestingContract {
                         start_time: 0,
                         end_time: 0,
                         is_initialized: false,
+                        is_revocable: false,
                     }
                 });
             
@@ -475,6 +512,63 @@ impl VestingContract {
         }
         
         vault_ids
+    }
+    
+    // Revoke a vault - returns vested tokens to beneficiary, unvested to admin
+    // Can only be called by admin and only for revocable vaults
+    pub fn revoke(env: Env, vault_id: u64) -> (i128, i128) {
+        Self::require_admin(&env);
+        
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        // Check if vault is revocable
+        require!(vault.is_revocable, "Vault is not revocable");
+        
+        // Calculate vested and unvested amounts
+        let vested_amount = Self::calculate_vested_amount(&env, &vault);
+        let unvested_amount = vault.total_amount - vested_amount;
+        
+        // Ensure we're not trying to revoke already claimed tokens
+        let remaining_vested = if vested_amount > vault.released_amount {
+            vested_amount - vault.released_amount
+        } else {
+            0i128
+        };
+        
+        require!(unvested_amount > 0 || remaining_vested > 0, "No tokens to revoke");
+        
+        // Update vault: mark all tokens as released
+        // This effectively makes the beneficiary able to claim the vested portion
+        // and returns unvested to admin
+        vault.released_amount = vault.total_amount;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+        
+        // Return unvested tokens to admin
+        let mut admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
+        admin_balance += unvested_amount;
+        env.storage().instance().set(&ADMIN_BALANCE, &admin_balance);
+        
+        // Get current timestamp
+        let timestamp = env.ledger().timestamp();
+        
+        // Emit TokensRevoked event with detailed info
+        let revoked_event = TokensRevoked {
+            vault_id,
+            vested_amount,
+            unvested_amount,
+            beneficiary: vault.owner.clone(),
+            timestamp,
+        };
+        env.events().publish(
+            (Symbol::new(&env, "TokensRevoked"), vault_id),
+            revoked_event,
+        );
+        
+        (vested_amount, unvested_amount)
     }
     
     // Revoke tokens from a vault and return them to admin
