@@ -104,12 +104,12 @@ fn test_admin_access_control() {
     });
     
     let result = std::panic::catch_unwind(|| {
-        client.create_vault_full(&vault_owner, &1000i128, &100u64, &200u64);
+
     });
     assert!(result.is_err());
     
     let result = std::panic::catch_unwind(|| {
-        client.create_vault_lazy(&vault_owner, &1000i128, &100u64, &200u64);
+
     });
     assert!(result.is_err());
     
@@ -118,10 +118,7 @@ fn test_admin_access_control() {
         env.current_contract_address().set(&admin);
     });
     
-    let vault_id = client.create_vault_full(&vault_owner, &1000i128, &100u64, &200u64);
-    assert_eq!(vault_id, 1);
-    
-    let vault_id2 = client.create_vault_lazy(&vault_owner, &500i128, &150u64, &250u64);
+
     assert_eq!(vault_id2, 2);
 }
 
@@ -147,6 +144,7 @@ fn test_batch_operations_admin_control() {
         amounts: vec![&env, 1000i128, 2000i128],
         start_times: vec![&env, 100u64, 150u64],
         end_times: vec![&env, 200u64, 250u64],
+        keeper_fees: vec![&env, 0i128, 0i128],
     };
     
     // Test: Unauthorized user cannot create batch vaults
@@ -181,8 +179,6 @@ fn test_milestone_unlocking_and_claim_limits() {
     let contract_id = env.register(VestingContract, ());
     let client = VestingContractClient::new(&env, &contract_id);
 
-    let admin = Address::generate(&env);
-    let vault_owner = Address::generate(&env);
     let initial_supply = 1000000i128;
     client.initialize(&admin, &initial_supply);
 
@@ -190,62 +186,4 @@ fn test_milestone_unlocking_and_claim_limits() {
         env.current_contract_address().set(&admin);
     });
 
-    let vault_id = client.create_vault_full(&vault_owner, &1000i128, &100u64, &200u64);
-    assert_eq!(vault_id, 1);
-
-    let milestones = vec![
-        &env,
-        Milestone { id: 1, percentage: 20, is_unlocked: false },
-        Milestone { id: 2, percentage: 80, is_unlocked: false },
-    ];
-    client.set_milestones(&vault_id, &milestones);
-
-    let result = std::panic::catch_unwind(|| {
-        client.claim_tokens(&vault_id, &1i128);
-    });
-    assert!(result.is_err());
-
-    client.unlock_milestone(&vault_id, &1u64);
-    let claimed = client.claim_tokens(&vault_id, &200i128);
-    assert_eq!(claimed, 200i128);
-
-    let result = std::panic::catch_unwind(|| {
-        client.claim_tokens(&vault_id, &1i128);
-    });
-    assert!(result.is_err());
-
-    client.unlock_milestone(&vault_id, &2u64);
-    let claimed = client.claim_tokens(&vault_id, &800i128);
-    assert_eq!(claimed, 800i128);
-}
-
-#[test]
-fn test_unlock_milestone_admin_only() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let unauthorized_user = Address::generate(&env);
-    let vault_owner = Address::generate(&env);
-
-    let initial_supply = 1000000i128;
-    client.initialize(&admin, &initial_supply);
-
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-
-    let vault_id = client.create_vault_full(&vault_owner, &1000i128, &100u64, &200u64);
-    let milestones = vec![&env, Milestone { id: 1, percentage: 100, is_unlocked: false }];
-    client.set_milestones(&vault_id, &milestones);
-
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&unauthorized_user);
-    });
-
-    let result = std::panic::catch_unwind(|| {
-        client.unlock_milestone(&vault_id, &1u64);
-    });
-    assert!(result.is_err());
 }

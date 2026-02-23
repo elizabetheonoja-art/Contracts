@@ -7,17 +7,7 @@ pub use factory::{VestingFactory, VestingFactoryClient};
 #[contract]
 pub struct VestingContract;
 
-#[contracttype]
-enum DataKey {
-    VaultCount,
-    VaultData(u64),
-    UserVaults(Address),
-    VaultMilestones(u64),
-    InitialSupply,
-    AdminBalance,
-    AdminAddress,
-    ProposedAdmin,
-}
+
 
 // Vault structure with lazy initialization
 #[contracttype]
@@ -29,6 +19,7 @@ pub struct Vault {
     pub released_amount: i128,
     pub start_time: u64,
     pub end_time: u64,
+    pub keeper_fee: i128, // Fee paid to anyone who triggers auto_claim
     pub is_initialized: bool, // Lazy initialization flag
     pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
 }
@@ -47,12 +38,15 @@ pub struct BatchCreateData {
     pub amounts: Vec<i128>,
     pub start_times: Vec<u64>,
     pub end_times: Vec<u64>,
+    pub keeper_fees: Vec<i128>,
 }
 
 #[contracttype]
 pub struct TokensRevoked {
     pub vault_id: u64,
-    pub amount_returned_to_admin: i128,
+    pub vested_amount: i128,
+    pub unvested_amount: i128,
+    pub beneficiary: Address,
     pub timestamp: u64,
 }
 
@@ -176,13 +170,7 @@ impl VestingContract {
     }
 
     // Full initialization - writes all metadata immediately
-    pub fn create_vault_full(
-        env: Env,
-        owner: Address,
-        amount: i128,
-        start_time: u64,
-        end_time: u64,
-    ) -> u64 {
+
         Self::require_admin(&env);
 
         // Get next vault ID
@@ -215,8 +203,7 @@ impl VestingContract {
             released_amount: 0,
             start_time,
             end_time,
-            is_initialized: true,  // Mark as fully initialized
-            is_irrevocable: false, // Default to revocable
+<
         };
 
         // Store vault data immediately (expensive gas usage)
@@ -259,14 +246,6 @@ impl VestingContract {
     }
 
     // Lazy initialization - writes minimal data initially
-    pub fn create_vault_lazy(
-        env: Env,
-        owner: Address,
-        amount: i128,
-        start_time: u64,
-        end_time: u64,
-    ) -> u64 {
-        Self::require_admin(&env);
 
         // Get next vault ID
         let mut vault_count: u64 = env
@@ -298,8 +277,9 @@ impl VestingContract {
             released_amount: 0,
             start_time,
             end_time,
+            keeper_fee,
             is_initialized: false, // Mark as lazy initialized
-            is_irrevocable: false, // Default to revocable
+            is_irrevocable: !is_revocable, // Convert from is_revocable parameter
         };
 
         // Store only essential data initially (cheaper gas)
@@ -333,12 +313,6 @@ impl VestingContract {
     }
 
     // Initialize vault metadata when needed (on-demand)
-    pub fn initialize_vault_metadata(env: &Env, vault_id: u64) -> bool {
-        let vault: Vault = env
-            .storage()
-            .instance()
-            .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| panic!("Vault not found"));
 
         // Only initialize if not already initialized
         if !vault.is_initialized {
@@ -663,8 +637,9 @@ impl VestingContract {
                 released_amount: 0,
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
+                keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
                 is_initialized: false, // Lazy initialization
-                is_irrevocable: false, // Default to revocable
+                is_irrevocable: false, // Default to revocable for batch operations
             };
 
             // Store vault data (minimal writes)
@@ -733,9 +708,7 @@ impl VestingContract {
                 released_amount: 0,
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
-                is_initialized: true,  // Full initialization
-                is_irrevocable: false, // Default to revocable
-            };
+ };
 
             // Store vault data (expensive writes)
             env.storage()
@@ -780,11 +753,6 @@ impl VestingContract {
 
     // Get vault info (initializes if needed)
     pub fn get_vault(env: Env, vault_id: u64) -> Vault {
-        let vault: Vault = env
-            .storage()
-            .instance()
-            .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| panic!("Vault not found"));
 
         // Auto-initialize if lazy
         if !vault.is_initialized {
@@ -809,19 +777,7 @@ impl VestingContract {
 
         // Initialize all lazy vaults for this user
         for vault_id in vault_ids.iter() {
-            let vault: Vault = env
-                .storage()
-                .instance()
-                .get(&DataKey::VaultData(vault_id))
-                .unwrap_or_else(|| Vault {
-                    owner: user.clone(),
-                    delegate: None,
-                    total_amount: 0,
-                    released_amount: 0,
-                    start_time: 0,
-                    end_time: 0,
-                    is_initialized: false,
-                    is_irrevocable: false,
+
                 });
 
             if !vault.is_initialized {
@@ -1025,5 +981,80 @@ impl VestingContract {
 
         let sum = total_locked + total_claimed + admin_balance;
         sum == initial_supply
+    }
+
+    // --- New Auto-Claim Logic ---
+
+    // Calculate currently claimable tokens based on linear vesting
+    pub fn get_claimable_amount(env: Env, vault_id: u64) -> i128 {
+        let vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| panic!("Vault not found"));
+
+        let now = env.ledger().timestamp();
+        
+        if now <= vault.start_time {
+            return 0;
+        }
+
+        let elapsed = if now >= vault.end_time {
+            vault.end_time - vault.start_time
+        } else {
+            now - vault.start_time
+        };
+
+        let total_duration = vault.end_time - vault.start_time;
+        
+        let vested = if total_duration > 0 {
+            // Use i128 for calculation to prevent overflow then back to i128
+            (vault.total_amount * elapsed as i128) / total_duration as i128
+        } else {
+            vault.total_amount
+        };
+
+        if vested > vault.released_amount {
+            vested - vault.released_amount
+        } else {
+            0
+        }
+    }
+
+    // Auto-claim function that anyone can call.
+    // Tokens go to beneficiary, but keeper can get a tip.
+    pub fn auto_claim(env: Env, vault_id: u64, keeper: Address) {
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| panic!("Vault not found"));
+
+        require!(vault.is_initialized, "Vault not initialized");
+
+        let claimable = Self::get_claimable_amount(env.clone(), vault_id);
+        
+        // Ensure there's enough to cover the fee and something left for beneficiary
+        require!(claimable > vault.keeper_fee, "Insufficient claimable tokens to cover fee");
+
+        let beneficiary_amount = claimable - vault.keeper_fee;
+        
+        // Update vault
+        vault.released_amount += claimable;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+
+        // Update keeper fees
+        let mut fees: Map<Address, i128> = env.storage().instance().get(&KEEPER_FEES).unwrap_or(Map::new(&env));
+        let current_fees = fees.get(keeper.clone()).unwrap_or(0);
+        fees.set(keeper.clone(), current_fees + vault.keeper_fee);
+        env.storage().instance().set(&KEEPER_FEES, &fees);
+
+        // Emit KeeperClaim event
+        env.events().publish(
+            (Symbol::new(&env, "KeeperClaim"), vault_id, keeper),
+            (beneficiary_amount, vault.keeper_fee)
+        );
+    }
+
+    // Get accumulated fees for a keeper
+    pub fn get_keeper_fee(env: Env, keeper: Address) -> i128 {
+        let fees: Map<Address, i128> = env.storage().instance().get(&KEEPER_FEES).unwrap_or(Map::new(&env));
+        fees.get(keeper).unwrap_or(0)
     }
 }
