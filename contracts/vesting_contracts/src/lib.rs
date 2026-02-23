@@ -18,6 +18,7 @@ const INITIAL_SUPPLY: Symbol = Symbol::new(&"INITIAL_SUPPLY");
 const ADMIN_BALANCE: Symbol = Symbol::new(&"ADMIN_BALANCE");
 const ADMIN_ADDRESS: Symbol = Symbol::new(&"ADMIN_ADDRESS");
 const PROPOSED_ADMIN: Symbol = Symbol::new(&"PROPOSED_ADMIN");
+const KEEPER_FEES: Symbol = Symbol::new(&"KEEPER_FEES");
 
 // Vault structure with lazy initialization
 #[contracttype]
@@ -28,6 +29,7 @@ pub struct Vault {
     pub released_amount: i128,
     pub start_time: u64,
     pub end_time: u64,
+    pub keeper_fee: i128, // Fee paid to anyone who triggers auto_claim
     pub is_initialized: bool, // Lazy initialization flag
     pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
 }
@@ -38,6 +40,7 @@ pub struct BatchCreateData {
     pub amounts: Vec<i128>,
     pub start_times: Vec<u64>,
     pub end_times: Vec<u64>,
+    pub keeper_fees: Vec<i128>,
 }
 
 #[contracttype]
@@ -118,7 +121,7 @@ impl VestingContract {
     }
     
     // Full initialization - writes all metadata immediately
-    pub fn create_vault_full(env: Env, owner: Address, amount: i128, start_time: u64, end_time: u64, is_revocable: bool) -> u64 {
+
         Self::require_admin(&env);
         
         // Get next vault ID
@@ -139,6 +142,7 @@ impl VestingContract {
             released_amount: 0,
             start_time,
             end_time,
+            keeper_fee,
             is_initialized: true, // Mark as fully initialized
             is_irrevocable: !is_revocable, // Convert from is_revocable parameter
         };
@@ -172,8 +176,7 @@ impl VestingContract {
     }
     
     // Lazy initialization - writes minimal data initially
-    pub fn create_vault_lazy(env: Env, owner: Address, amount: i128, start_time: u64, end_time: u64, is_revocable: bool) -> u64 {
-        Self::require_admin(&env);
+   Self::require_admin(&env);
         
         // Get next vault ID
         let mut vault_count: u64 = env.storage().instance().get(&VAULT_COUNT).unwrap_or(0);
@@ -193,6 +196,7 @@ impl VestingContract {
             released_amount: 0,
             start_time,
             end_time,
+            keeper_fee,
             is_initialized: false, // Mark as lazy initialized
             is_irrevocable: !is_revocable, // Convert from is_revocable parameter
         };
@@ -234,6 +238,7 @@ impl VestingContract {
                     released_amount: 0,
                     start_time: 0,
                     end_time: 0,
+                    keeper_fee: 0,
                     is_initialized: false,
                     is_irrevocable: false,
                 }
@@ -424,6 +429,7 @@ impl VestingContract {
                 released_amount: 0,
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
+                keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
                 is_initialized: false, // Lazy initialization
                 is_irrevocable: false, // Default to revocable for batch operations
             };
@@ -477,6 +483,7 @@ impl VestingContract {
                 released_amount: 0,
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
+                keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
                 is_initialized: true, // Full initialization
                 is_irrevocable: false, // Default to revocable for batch operations
             };
@@ -525,6 +532,7 @@ impl VestingContract {
                     released_amount: 0,
                     start_time: 0,
                     end_time: 0,
+                    keeper_fee: 0,
                     is_initialized: false,
                     is_irrevocable: false,
                 }
@@ -558,6 +566,7 @@ impl VestingContract {
                         released_amount: 0,
                         start_time: 0,
                         end_time: 0,
+                        keeper_fee: 0,
                         is_initialized: false,
                         is_irrevocable: false,
                     }
@@ -768,5 +777,80 @@ impl VestingContract {
         
         let sum = total_locked + total_claimed + admin_balance;
         sum == initial_supply
+    }
+
+    // --- New Auto-Claim Logic ---
+
+    // Calculate currently claimable tokens based on linear vesting
+    pub fn get_claimable_amount(env: Env, vault_id: u64) -> i128 {
+        let vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| panic!("Vault not found"));
+
+        let now = env.ledger().timestamp();
+        
+        if now <= vault.start_time {
+            return 0;
+        }
+
+        let elapsed = if now >= vault.end_time {
+            vault.end_time - vault.start_time
+        } else {
+            now - vault.start_time
+        };
+
+        let total_duration = vault.end_time - vault.start_time;
+        
+        let vested = if total_duration > 0 {
+            // Use i128 for calculation to prevent overflow then back to i128
+            (vault.total_amount * elapsed as i128) / total_duration as i128
+        } else {
+            vault.total_amount
+        };
+
+        if vested > vault.released_amount {
+            vested - vault.released_amount
+        } else {
+            0
+        }
+    }
+
+    // Auto-claim function that anyone can call.
+    // Tokens go to beneficiary, but keeper can get a tip.
+    pub fn auto_claim(env: Env, vault_id: u64, keeper: Address) {
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| panic!("Vault not found"));
+
+        require!(vault.is_initialized, "Vault not initialized");
+
+        let claimable = Self::get_claimable_amount(env.clone(), vault_id);
+        
+        // Ensure there's enough to cover the fee and something left for beneficiary
+        require!(claimable > vault.keeper_fee, "Insufficient claimable tokens to cover fee");
+
+        let beneficiary_amount = claimable - vault.keeper_fee;
+        
+        // Update vault
+        vault.released_amount += claimable;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+
+        // Update keeper fees
+        let mut fees: Map<Address, i128> = env.storage().instance().get(&KEEPER_FEES).unwrap_or(Map::new(&env));
+        let current_fees = fees.get(keeper.clone()).unwrap_or(0);
+        fees.set(keeper.clone(), current_fees + vault.keeper_fee);
+        env.storage().instance().set(&KEEPER_FEES, &fees);
+
+        // Emit KeeperClaim event
+        env.events().publish(
+            (Symbol::new(&env, "KeeperClaim"), vault_id, keeper),
+            (beneficiary_amount, vault.keeper_fee)
+        );
+    }
+
+    // Get accumulated fees for a keeper
+    pub fn get_keeper_fee(env: Env, keeper: Address) -> i128 {
+        let fees: Map<Address, i128> = env.storage().instance().get(&KEEPER_FEES).unwrap_or(Map::new(&env));
+        fees.get(keeper).unwrap_or(0)
     }
 }

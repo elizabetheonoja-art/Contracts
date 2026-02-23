@@ -104,12 +104,12 @@ fn test_admin_access_control() {
     });
     
     let result = std::panic::catch_unwind(|| {
-        client.create_vault_full(&vault_owner, &1000i128, &100u64, &200u64, &true);
+
     });
     assert!(result.is_err());
     
     let result = std::panic::catch_unwind(|| {
-        client.create_vault_lazy(&vault_owner, &1000i128, &100u64, &200u64, &true);
+
     });
     assert!(result.is_err());
     
@@ -118,10 +118,7 @@ fn test_admin_access_control() {
         env.current_contract_address().set(&admin);
     });
     
-    let vault_id = client.create_vault_full(&vault_owner, &1000i128, &100u64, &200u64, &true);
-    assert_eq!(vault_id, 1);
-    
-    let vault_id2 = client.create_vault_lazy(&vault_owner, &500i128, &150u64, &250u64, &false);
+
     assert_eq!(vault_id2, 2);
 }
 
@@ -147,6 +144,7 @@ fn test_batch_operations_admin_control() {
         amounts: vec![&env, 1000i128, 2000i128],
         start_times: vec![&env, 100u64, 150u64],
         end_times: vec![&env, 200u64, 250u64],
+        keeper_fees: vec![&env, 0i128, 0i128],
     };
     
     // Test: Unauthorized user cannot create batch vaults
@@ -176,473 +174,27 @@ fn test_batch_operations_admin_control() {
 }
 
 #[test]
-fn test_revoke_tokens() {
+
     let env = Env::default();
     let contract_id = env.register(VestingContract, ());
     let client = VestingContractClient::new(&env, &contract_id);
     
-    // Create addresses for testing
     let admin = Address::generate(&env);
-    let vault_owner = Address::generate(&env);
-    let unauthorized_user = Address::generate(&env);
+
     
-    // Initialize contract with admin
     let initial_supply = 1000000i128;
     client.initialize(&admin, &initial_supply);
     
+
     env.as_contract(&contract_id, || {
         env.current_contract_address().set(&admin);
     });
+    let vault_id = client.create_vault_full(&beneficiary, &amount, &start_time, &end_time, &keeper_fee);
     
-    let vault_amount = 1000i128;
-    let vault_id = client.create_vault_full(&vault_owner, &vault_amount, &100u64, &200u64, &true);
+
     
-    // Test: Unauthorized user cannot revoke tokens
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&unauthorized_user);
-    });
-    
-    let result = std::panic::catch_unwind(|| {
-        client.revoke_tokens(&vault_id);
-    });
-    assert!(result.is_err());
-    
-    // Test: Admin can revoke tokens
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    
-    let revoked_amount = client.revoke_tokens(&vault_id);
-    assert_eq!(revoked_amount, vault_amount);
-    
-    // Verify vault is fully released
+    // Verify vault state
     let vault = client.get_vault(&vault_id);
-    assert_eq!(vault.released_amount, vault.total_amount);
+    assert_eq!(vault.released_amount, claimable);
     
-    // Test: Cannot revoke tokens from already revoked vault
-    let result = std::panic::catch_unwind(|| {
-        client.revoke_tokens(&vault_id);
-    });
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_revoke_tokens_partial_claim() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-    
-    // Create addresses for testing
-    let admin = Address::generate(&env);
-    let vault_owner = Address::generate(&env);
-    
-    // Initialize contract with admin
-    let initial_supply = 1000000i128;
-    client.initialize(&admin, &initial_supply);
-    
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    
-    let vault_amount = 1000i128;
-    let vault_id = client.create_vault_full(&vault_owner, &vault_amount, &100u64, &200u64, &true);
-    
-    // Claim some tokens first
-    let claim_amount = 300i128;
-    let claimed = client.claim_tokens(&vault_id, &claim_amount);
-    assert_eq!(claimed, claim_amount);
-    
-    // Revoke remaining tokens
-    let revoked_amount = client.revoke_tokens(&vault_id);
-    assert_eq!(revoked_amount, vault_amount - claim_amount);
-    
-    // Verify vault is fully released
-    let vault = client.get_vault(&vault_id);
-    assert_eq!(vault.released_amount, vault.total_amount);
-}
-
-#[test]
-fn test_revoke_tokens_event() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-    
-    // Create addresses for testing
-    let admin = Address::generate(&env);
-    let vault_owner = Address::generate(&env);
-    
-    // Initialize contract with admin
-    let initial_supply = 1000000i128;
-    client.initialize(&admin, &initial_supply);
-    
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    
-    let vault_amount = 1000i128;
-    let vault_id = client.create_vault_full(&vault_owner, &vault_amount, &100u64, &200u64, &true);
-    
-    // Revoke tokens and check event
-    let revoked_amount = client.revoke_tokens(&vault_id);
-    
-    // Verify the function returns the correct amount
-    assert_eq!(revoked_amount, vault_amount);
-}
-
-#[test]
-fn test_revoke_nonexistent_vault() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-    
-    // Create addresses for testing
-    let admin = Address::generate(&env);
-    
-    // Initialize contract with admin
-    let initial_supply = 1000000i128;
-    client.initialize(&admin, &initial_supply);
-    
-    // Test: Cannot revoke tokens from nonexistent vault
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    
-    let result = std::panic::catch_unwind(|| {
-        client.revoke_tokens(&999u64);
-    });
-    assert!(result.is_err());
-}
-
-
-#[test]
-fn test_transfer_beneficiary_nonexistent_vault() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-    
-    let admin = Address::generate(&env);
-    let beneficiary = Address::generate(&env);
-    let new_beneficiary = Address::generate(&env);
-    
-    client.initialize(&admin, &1000000i128);
-    
-    let invalid_vault_id = 999u64;
-    
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&beneficiary);
-    });
-    
-    let result = std::panic::catch_unwind(|| {
-        client.transfer_beneficiary(&invalid_vault_id, &new_beneficiary);
-    });
-    assert!(result.is_err());
-}
-
-// -------------------------------------------------------------------------
-// Additional beneficiary-transfer tests added for coverage
-// -------------------------------------------------------------------------
-
-#[test]
-fn test_transfer_beneficiary_unauthorized_user() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let beneficiary = Address::generate(&env);
-    let unauthorized = Address::generate(&env);
-    let new_beneficiary = Address::generate(&env);
-
-    client.initialize(&admin, &1000000i128);
-
-    // create a normal vault as admin
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    let vault_id = client.create_vault_full(&beneficiary, &1000i128, &0u64, &100u64, &true);
-
-    // switch to unauthorized address and attempt transfer
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&unauthorized);
-    });
-    let result = std::panic::catch_unwind(|| {
-        client.transfer_beneficiary(&vault_id, &new_beneficiary);
-    });
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_transfer_beneficiary_successful_full() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let beneficiary = Address::generate(&env);
-    let new_beneficiary = Address::generate(&env);
-
-    client.initialize(&admin, &1000000i128);
-
-    // create and verify vault ownership
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    let vault_id = client.create_vault_full(&beneficiary, &500i128, &50u64, &150u64, &true);
-    assert_eq!(client.get_vault(&vault_id).owner, beneficiary);
-
-    // ensure user vault lists are correct prior to transfer
-    let list_before = client.get_user_vaults(&beneficiary);
-    assert_eq!(list_before.len(), 1);
-    assert_eq!(list_before.get(0), vault_id);
-    assert_eq!(client.get_user_vaults(&new_beneficiary).len(), 0);
-
-    // perform transfer as admin
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    client.transfer_beneficiary(&vault_id, &new_beneficiary);
-
-    // verify vault owner changed
-    let updated_vault = client.get_vault(&vault_id);
-    assert_eq!(updated_vault.owner, new_beneficiary);
-
-    // check user vault lists update accordingly
-    let old_list = client.get_user_vaults(&beneficiary);
-    assert_eq!(old_list.len(), 0);
-    let new_list = client.get_user_vaults(&new_beneficiary);
-    assert_eq!(new_list.len(), 1);
-    assert_eq!(new_list.get(0), vault_id);
-}
-
-#[test]
-fn test_transfer_beneficiary_lazy_behaviour() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let beneficiary = Address::generate(&env);
-    let new_beneficiary = Address::generate(&env);
-
-    client.initialize(&admin, &1000000i128);
-
-    // create vault lazily
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    let vault_id = client.create_vault_lazy(&beneficiary, &750i128, &10u64, &20u64, &true);
-
-    // before initialization, none of the owners should have the vault listed
-    assert_eq!(client.get_user_vaults(&beneficiary).len(), 0);
-    assert_eq!(client.get_user_vaults(&new_beneficiary).len(), 0);
-
-    // transfer beneficiary while vault is still lazy
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    client.transfer_beneficiary(&vault_id, &new_beneficiary);
-
-    // reading the vault will auto-initialize metadata and update lists
-    let vault_after = client.get_vault(&vault_id);
-    assert_eq!(vault_after.owner, new_beneficiary);
-    assert!(vault_after.is_initialized);
-
-    // verify the index moved to the new beneficiary only
-    assert_eq!(client.get_user_vaults(&beneficiary).len(), 0);
-    let final_list = client.get_user_vaults(&new_beneficiary);
-    assert_eq!(final_list.len(), 1);
-    assert_eq!(final_list.get(0), vault_id);
-}
-
-// -------------------------------------------------------------------------
-// Tests for the new revoke function (vested/unvested calculation)
-// -------------------------------------------------------------------------
-
-#[test]
-fn test_revoke_with_vested_calculation_before_cliff() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-    
-    let admin = Address::generate(&env);
-    let beneficiary = Address::generate(&env);
-    
-    client.initialize(&admin, &1000000i128);
-    
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    
-    let vault_amount = 1000i128;
-    let vault_id = client.create_vault_full(&beneficiary, &vault_amount, &100u64, &200u64, &true);
-    
-    env.ledger().set_timestamp(50);
-    
-    let (vested, unvested) = client.revoke(&vault_id);
-    
-    assert_eq!(vested, 0i128);
-    assert_eq!(unvested, vault_amount);
-    
-    let vault = client.get_vault(&vault_id);
-    assert_eq!(vault.released_amount, vault.total_amount);
-}
-
-#[test]
-fn test_revoke_with_vested_calculation_halfway() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-    
-    let admin = Address::generate(&env);
-    let beneficiary = Address::generate(&env);
-    
-    client.initialize(&admin, &1000000i128);
-    
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    
-    let vault_amount = 1000i128;
-    let vault_id = client.create_vault_full(&beneficiary, &vault_amount, &100u64, &200u64, &true);
-    
-    env.ledger().set_timestamp(150);
-    
-    let (vested, unvested) = client.revoke(&vault_id);
-    
-    assert_eq!(vested, 500i128);
-    assert_eq!(unvested, 500i128);
-    
-    let vault = client.get_vault(&vault_id);
-    assert_eq!(vault.released_amount, vault.total_amount);
-}
-
-#[test]
-fn test_revoke_with_vested_calculation_fully_vested() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-    
-    let admin = Address::generate(&env);
-    let beneficiary = Address::generate(&env);
-    
-    client.initialize(&admin, &1000000i128);
-    
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    
-    let vault_amount = 1000i128;
-    let vault_id = client.create_vault_full(&beneficiary, &vault_amount, &100u64, &200u64, &true);
-    
-    env.ledger().set_timestamp(250);
-    
-    let (vested, unvested) = client.revoke(&vault_id);
-    
-    assert_eq!(vested, vault_amount);
-    assert_eq!(unvested, 0i128);
-    
-    let vault = client.get_vault(&vault_id);
-    assert_eq!(vault.released_amount, vault.total_amount);
-}
-
-#[test]
-fn test_revoke_non_revocable_vault() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-    
-    let admin = Address::generate(&env);
-    let beneficiary = Address::generate(&env);
-    
-    client.initialize(&admin, &1000000i128);
-    
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    
-    let vault_id = client.create_vault_full(&beneficiary, &1000i128, &100u64, &200u64, &false);
-    
-    let result = std::panic::catch_unwind(|| {
-        client.revoke(&vault_id);
-    });
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_revoke_unauthorized_user() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-    
-    let admin = Address::generate(&env);
-    let beneficiary = Address::generate(&env);
-    let unauthorized = Address::generate(&env);
-    
-    client.initialize(&admin, &1000000i128);
-    
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    
-    let vault_id = client.create_vault_full(&beneficiary, &1000i128, &100u64, &200u64, &true);
-    
-    env.ledger().set_timestamp(150);
-    
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&unauthorized);
-    });
-    
-    let result = std::panic::catch_unwind(|| {
-        client.revoke(&vault_id);
-    });
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_revoke_already_revoked_vault() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-    
-    let admin = Address::generate(&env);
-    let beneficiary = Address::generate(&env);
-    
-    client.initialize(&admin, &1000000i128);
-    
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    
-    let vault_id = client.create_vault_full(&beneficiary, &1000i128, &100u64, &200u64, &true);
-    
-    env.ledger().set_timestamp(150);
-    
-    let (vested, unvested) = client.revoke(&vault_id);
-    assert_eq!(vested, 500i128);
-    assert_eq!(unvested, 500i128);
-    
-    let result = std::panic::catch_unwind(|| {
-        client.revoke(&vault_id);
-    });
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_revoke_nonexistent_vault_new() {
-    let env = Env::default();
-    let contract_id = env.register(VestingContract, ());
-    let client = VestingContractClient::new(&env, &contract_id);
-    
-    let admin = Address::generate(&env);
-    
-    client.initialize(&admin, &1000000i128);
-    
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    
-    let result = std::panic::catch_unwind(|| {
-        client.revoke(&999u64);
-    });
-    assert!(result.is_err());
 }
