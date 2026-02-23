@@ -23,6 +23,7 @@ const PROPOSED_ADMIN: Symbol = Symbol::new(&"PROPOSED_ADMIN");
 #[contracttype]
 pub struct Vault {
     pub owner: Address,
+    pub delegate: Option<Address>, // Optional delegate address for claiming
     pub total_amount: i128,
     pub released_amount: i128,
     pub start_time: u64,
@@ -131,6 +132,7 @@ impl VestingContract {
         // Create vault with full initialization
         let vault = Vault {
             owner: owner.clone(),
+            delegate: None, // No delegate initially
             total_amount: amount,
             released_amount: 0,
             start_time,
@@ -184,6 +186,7 @@ impl VestingContract {
         // Create vault with lazy initialization (minimal storage)
         let vault = Vault {
             owner: owner.clone(),
+            delegate: None, // No delegate initially
             total_amount: amount,
             released_amount: 0,
             start_time,
@@ -224,6 +227,7 @@ impl VestingContract {
                 // Return empty vault if not found
                 Vault {
                     owner: Address::from_contract_id(&env.current_contract_address()),
+                    delegate: None,
                     total_amount: 0,
                     released_amount: 0,
                     start_time: 0,
@@ -320,6 +324,52 @@ impl VestingContract {
         );
     }
     
+    // Set delegate address for a vault (only owner can call)
+    pub fn set_delegate(env: Env, vault_id: u64, delegate: Option<Address>) {
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        require!(vault.is_initialized, "Vault not initialized");
+        
+        // Check if caller is the vault owner
+        let caller = env.current_contract_address();
+        require!(caller == vault.owner, "Only vault owner can set delegate");
+        
+        // Update delegate
+        vault.delegate = delegate;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+    }
+    
+    // Claim tokens as delegate (tokens still go to owner)
+    pub fn claim_as_delegate(env: Env, vault_id: u64, claim_amount: i128) -> i128 {
+        let vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        require!(vault.is_initialized, "Vault not initialized");
+        require!(claim_amount > 0, "Claim amount must be positive");
+        
+        // Check if caller is authorized delegate
+        let caller = env.current_contract_address();
+        require!(vault.delegate.is_some() && caller == vault.delegate.unwrap(), 
+                "Caller is not authorized delegate for this vault");
+        
+        let available_to_claim = vault.total_amount - vault.released_amount;
+        require!(claim_amount <= available_to_claim, "Insufficient tokens to claim");
+        
+        // Update vault (same as regular claim)
+        let mut updated_vault = vault.clone();
+        updated_vault.released_amount += claim_amount;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &updated_vault);
+        
+        claim_amount // Tokens go to original owner, not delegate
+    }
+    
     // Batch create vaults with lazy initialization
     pub fn batch_create_vaults_lazy(env: Env, batch_data: BatchCreateData) -> Vec<u64> {
         Self::require_admin(&env);
@@ -340,6 +390,7 @@ impl VestingContract {
             // Create vault with lazy initialization
             let vault = Vault {
                 owner: batch_data.recipients.get(i).unwrap(),
+                delegate: None, // No delegate initially
                 total_amount: batch_data.amounts.get(i).unwrap(),
                 released_amount: 0,
                 start_time: batch_data.start_times.get(i).unwrap(),
@@ -392,6 +443,7 @@ impl VestingContract {
             // Create vault with full initialization
             let vault = Vault {
                 owner: batch_data.recipients.get(i).unwrap(),
+                delegate: None, // No delegate initially
                 total_amount: batch_data.amounts.get(i).unwrap(),
                 released_amount: 0,
                 start_time: batch_data.start_times.get(i).unwrap(),
@@ -439,6 +491,7 @@ impl VestingContract {
             .unwrap_or_else(|| {
                 Vault {
                     owner: Address::from_contract_id(&env.current_contract_address()),
+                    delegate: None,
                     total_amount: 0,
                     released_amount: 0,
                     start_time: 0,
@@ -471,6 +524,7 @@ impl VestingContract {
                 .unwrap_or_else(|| {
                     Vault {
                         owner: user.clone(),
+                        delegate: None,
                         total_amount: 0,
                         released_amount: 0,
                         start_time: 0,
