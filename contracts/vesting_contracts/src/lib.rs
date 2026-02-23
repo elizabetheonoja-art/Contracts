@@ -4,6 +4,9 @@ use soroban_sdk::{
     token, IntoVal, TryFromVal, try_from_val, ConversionError
 };
 
+mod factory;
+pub use factory::{VestingFactory, VestingFactoryClient};
+
 #[contract]
 pub struct VestingContract;
 
@@ -26,6 +29,7 @@ pub struct Vault {
     pub start_time: u64,
     pub end_time: u64,
     pub is_initialized: bool, // Lazy initialization flag
+    pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
 }
 
 #[contracttype]
@@ -34,6 +38,22 @@ pub struct BatchCreateData {
     pub amounts: Vec<i128>,
     pub start_times: Vec<u64>,
     pub end_times: Vec<u64>,
+}
+
+#[contracttype]
+pub struct TokensRevoked {
+    pub vault_id: u64,
+    pub amount_returned_to_admin: i128,
+    pub timestamp: u64,
+}
+
+#[contracttype]
+pub struct VaultCreated {
+    pub vault_id: u64,
+    pub beneficiary: Address,
+    pub total_amount: i128,
+    pub cliff_duration: u64,
+    pub start_time: u64,
 }
 
 #[contractimpl]
@@ -118,6 +138,7 @@ impl VestingContract {
             start_time,
             end_time,
             is_initialized: true, // Mark as fully initialized
+            is_irrevocable: false, // Default to revocable
         };
         
         // Store vault data immediately (expensive gas usage)
@@ -132,7 +153,19 @@ impl VestingContract {
         
         // Update vault count
         env.storage().instance().set(&VAULT_COUNT, &vault_count);
-        
+
+        // Emit VaultCreated event with strictly typed fields
+        let now = env.ledger().timestamp();
+        let cliff_duration = if start_time > now { start_time - now } else { 0 };
+        let vault_created = VaultCreated {
+            vault_id: vault_count,
+            beneficiary: owner.clone(),
+            total_amount: amount,
+            cliff_duration,
+            start_time,
+        };
+        env.events().publish((Symbol::new(&env, "VaultCreated"), vault_count), vault_created);
+
         vault_count
     }
     
@@ -159,6 +192,7 @@ impl VestingContract {
             start_time,
             end_time,
             is_initialized: false, // Mark as lazy initialized
+            is_irrevocable: false, // Default to revocable
         };
         
         // Store only essential data initially (cheaper gas)
@@ -169,6 +203,19 @@ impl VestingContract {
         
         // Don't update user vaults list yet (lazy)
         
+
+        // Emit VaultCreated event with strictly typed fields
+        let now = env.ledger().timestamp();
+        let cliff_duration = if start_time > now { start_time - now } else { 0 };
+        let vault_created = VaultCreated {
+            vault_id: vault_count,
+            beneficiary: owner.clone(),
+            total_amount: amount,
+            cliff_duration,
+            start_time,
+        };
+        env.events().publish((Symbol::new(&env, "VaultCreated"), vault_count), vault_created);
+
         vault_count
     }
     
@@ -186,6 +233,7 @@ impl VestingContract {
                     start_time: 0,
                     end_time: 0,
                     is_initialized: false,
+                    is_irrevocable: false,
                 }
             });
         
@@ -229,6 +277,51 @@ impl VestingContract {
         env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
         
         claim_amount
+    }
+
+    /// Transfers the beneficiary role of a vault to a new address.
+    /// Only the admin can perform this action (e.g., in case of lost keys).
+    pub fn transfer_beneficiary(env: Env, vault_id: u64, new_address: Address) {
+        Self::require_admin(&env);
+
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| panic!("Vault not found"));
+
+        let old_owner = vault.owner.clone();
+
+        // Update user vaults index if the vault has been initialized
+        if vault.is_initialized {
+            // Remove vault_id from old owner's list
+            let old_vaults: Vec<u64> = env.storage().instance()
+                .get(&USER_VAULTS, &old_owner)
+                .unwrap_or(Vec::new(&env));
+            
+            let mut updated_old_vaults = Vec::new(&env);
+            for id in old_vaults.iter() {
+                if id != vault_id {
+                    updated_old_vaults.push_back(id);
+                }
+            }
+            env.storage().instance().set(&USER_VAULTS, &old_owner, &updated_old_vaults);
+
+            // Add vault_id to new owner's list
+            let mut new_vaults: Vec<u64> = env.storage().instance()
+                .get(&USER_VAULTS, &new_address)
+                .unwrap_or(Vec::new(&env));
+            new_vaults.push_back(vault_id);
+            env.storage().instance().set(&USER_VAULTS, &new_address, &new_vaults);
+        }
+
+        // Update vault owner
+        vault.owner = new_address.clone();
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+
+        // Emit BeneficiaryChanged event
+        env.events().publish(
+            (Symbol::new(&env, "BeneficiaryChanged"), vault_id),
+            (old_owner, new_address)
+        );
     }
     
     // Set delegate address for a vault (only owner can call)
@@ -303,11 +396,24 @@ impl VestingContract {
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 is_initialized: false, // Lazy initialization
+                is_irrevocable: false, // Default to revocable
             };
             
             // Store vault data (minimal writes)
             env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
             vault_ids.push_back(vault_id);
+            // Emit VaultCreated event for each created vault
+            let now = env.ledger().timestamp();
+            let start_time = batch_data.start_times.get(i).unwrap();
+            let cliff_duration = if start_time > now { start_time - now } else { 0 };
+            let vault_created = VaultCreated {
+                vault_id,
+                beneficiary: vault.owner.clone(),
+                total_amount: vault.total_amount,
+                cliff_duration,
+                start_time,
+            };
+            env.events().publish((Symbol::new(&env, "VaultCreated"), vault_id), vault_created);
         }
         
         // Update vault count once (cheaper than individual updates)
@@ -343,6 +449,7 @@ impl VestingContract {
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 is_initialized: true, // Full initialization
+                is_irrevocable: false, // Default to revocable
             };
             
             // Store vault data (expensive writes)
@@ -356,6 +463,18 @@ impl VestingContract {
             env.storage().instance().set(&USER_VAULTS, &vault.owner, &user_vaults);
             
             vault_ids.push_back(vault_id);
+            // Emit VaultCreated event for each created vault
+            let now = env.ledger().timestamp();
+            let start_time = batch_data.start_times.get(i).unwrap();
+            let cliff_duration = if start_time > now { start_time - now } else { 0 };
+            let vault_created = VaultCreated {
+                vault_id,
+                beneficiary: vault.owner.clone(),
+                total_amount: vault.total_amount,
+                cliff_duration,
+                start_time,
+            };
+            env.events().publish((Symbol::new(&env, "VaultCreated"), vault_id), vault_created);
         }
         
         // Update vault count once
@@ -378,6 +497,7 @@ impl VestingContract {
                     start_time: 0,
                     end_time: 0,
                     is_initialized: false,
+                    is_irrevocable: false,
                 }
             });
         
@@ -410,6 +530,7 @@ impl VestingContract {
                         start_time: 0,
                         end_time: 0,
                         is_initialized: false,
+                        is_irrevocable: false,
                     }
                 });
             
@@ -419,6 +540,119 @@ impl VestingContract {
         }
         
         vault_ids
+    }
+    
+    // Revoke tokens from a vault and return them to admin
+    pub fn revoke_tokens(env: Env, vault_id: u64) -> i128 {
+        Self::require_admin(&env);
+        
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        // Security check: Cannot revoke from irrevocable vaults
+        require!(!vault.is_irrevocable, "Vault is irrevocable");
+        
+        // Calculate amount to return (unreleased tokens)
+        let unreleased_amount = vault.total_amount - vault.released_amount;
+        require!(unreleased_amount > 0, "No tokens available to revoke");
+        
+        // Update vault to mark all tokens as released (effectively revoking them)
+        vault.released_amount = vault.total_amount;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+        
+        // Return tokens to admin balance
+        let mut admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
+        admin_balance += unreleased_amount;
+        env.storage().instance().set(&ADMIN_BALANCE, &admin_balance);
+        
+        // Get current timestamp
+        let timestamp = env.ledger().timestamp();
+        
+        // Emit TokensRevoked event
+        env.events().publish(
+            (Symbol::new(&env, "TokensRevoked"), vault_id),
+            (unreleased_amount, timestamp),
+        );
+        
+        unreleased_amount
+    }
+    
+    // Revoke a specific amount of tokens from a vault and return them to admin
+    pub fn revoke_partial(env: Env, vault_id: u64, amount: i128) -> i128 {
+        Self::require_admin(&env);
+        
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        // Security check: Cannot revoke from irrevocable vaults
+        require!(!vault.is_irrevocable, "Vault is irrevocable");
+        
+        // Calculate unvested balance (tokens not yet released)
+        let unvested_balance = vault.total_amount - vault.released_amount;
+        require!(amount > 0, "Amount to revoke must be positive");
+        require!(amount <= unvested_balance, "Amount exceeds unvested balance");
+        
+        // Update vault to increase released amount by the specified amount
+        vault.released_amount += amount;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+        
+        // Return tokens to admin balance
+        let mut admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
+        admin_balance += amount;
+        env.storage().instance().set(&ADMIN_BALANCE, &admin_balance);
+        
+        // Get current timestamp
+        let timestamp = env.ledger().timestamp();
+        
+        // Emit TokensRevoked event
+        env.events().publish(
+            (Symbol::new(&env, "TokensRevoked"), vault_id),
+            (amount, timestamp),
+        );
+        
+        amount
+    }
+    
+    // Mark a vault as irrevocable to prevent admin withdrawal
+    pub fn mark_irrevocable(env: Env, vault_id: u64) {
+        Self::require_admin(&env);
+        
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        // Cannot mark already irrevocable vaults
+        require!(!vault.is_irrevocable, "Vault is already irrevocable");
+        
+        // Mark vault as irrevocable
+        vault.is_irrevocable = true;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+        
+        // Emit IrrevocableMarked event
+        let timestamp = env.ledger().timestamp();
+        env.events().publish(
+            (Symbol::new(&env, "IrrevocableMarked"), vault_id),
+            (timestamp),
+        );
+    }
+    
+    // Check if a vault is irrevocable
+    pub fn is_vault_irrevocable(env: Env, vault_id: u64) -> bool {
+        let vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        vault.is_irrevocable
     }
     
     // Get contract state for invariant checking

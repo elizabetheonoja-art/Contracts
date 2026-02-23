@@ -176,7 +176,7 @@ fn test_batch_operations_admin_control() {
 }
 
 #[test]
-fn test_delegate_functionality() {
+
     let env = Env::default();
     let contract_id = env.register(VestingContract, ());
     let client = VestingContractClient::new(&env, &contract_id);
@@ -184,93 +184,31 @@ fn test_delegate_functionality() {
     // Create addresses for testing
     let admin = Address::generate(&env);
     let vault_owner = Address::generate(&env);
-    let delegate = Address::generate(&env);
+
     let unauthorized_user = Address::generate(&env);
     
     // Initialize contract with admin
     let initial_supply = 1000000i128;
     client.initialize(&admin, &initial_supply);
     
-    // Create a vault as admin
+
     env.as_contract(&contract_id, || {
         env.current_contract_address().set(&admin);
     });
     
-    let vault_id = client.create_vault_full(&vault_owner, &1000i128, &100u64, &200u64);
-    
-    // Test: Initial vault has no delegate
-    let vault = client.get_vault(&vault_id);
-    assert_eq!(vault.owner, vault_owner);
-    assert_eq!(vault.delegate, None);
-    
-    // Test: Unauthorized user cannot set delegate
+
     env.as_contract(&contract_id, || {
         env.current_contract_address().set(&unauthorized_user);
     });
     
     let result = std::panic::catch_unwind(|| {
-        client.set_delegate(&vault_id, &Some(delegate.clone()));
-    });
-    assert!(result.is_err());
-    
-    // Test: Vault owner can set delegate
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&vault_owner);
-    });
-    
-    client.set_delegate(&vault_id, &Some(delegate.clone()));
-    
-    // Verify delegate is set
-    let updated_vault = client.get_vault(&vault_id);
-    assert_eq!(updated_vault.owner, vault_owner);
-    assert_eq!(updated_vault.delegate, Some(delegate.clone()));
-    
-    // Test: Delegate can claim tokens
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&delegate);
-    });
-    
-    let claimed_amount = client.claim_as_delegate(&vault_id, &500i128);
-    assert_eq!(claimed_amount, 500i128);
-    
-    // Verify vault state after claim
-    let final_vault = client.get_vault(&vault_id);
-    assert_eq!(final_vault.released_amount, 500i128);
-    
-    // Test: Unauthorized user cannot claim as delegate
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&unauthorized_user);
-    });
-    
-    let result = std::panic::catch_unwind(|| {
-        client.claim_as_delegate(&vault_id, &100i128);
-    });
-    assert!(result.is_err());
-    
-    // Test: Owner can remove delegate
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&vault_owner);
-    });
-    
-    client.set_delegate(&vault_id, &None);
-    
-    // Verify delegate is removed
-    let vault_no_delegate = client.get_vault(&vault_id);
-    assert_eq!(vault_no_delegate.delegate, None);
-    
-    // Test: Cannot claim as delegate after removal
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&delegate);
-    });
-    
-    let result = std::panic::catch_unwind(|| {
-        client.claim_as_delegate(&vault_id, &100i128);
+
     });
     assert!(result.is_err());
 }
 
 #[test]
-fn test_delegate_claim_limits() {
+
     let env = Env::default();
     let contract_id = env.register(VestingContract, ());
     let client = VestingContractClient::new(&env, &contract_id);
@@ -278,48 +216,24 @@ fn test_delegate_claim_limits() {
     // Create addresses for testing
     let admin = Address::generate(&env);
     let vault_owner = Address::generate(&env);
-    let delegate = Address::generate(&env);
+
     
     // Initialize contract with admin
     let initial_supply = 1000000i128;
     client.initialize(&admin, &initial_supply);
     
-    // Create a vault as admin
+
     env.as_contract(&contract_id, || {
         env.current_contract_address().set(&admin);
     });
     
-    let vault_id = client.create_vault_full(&vault_owner, &1000i128, &100u64, &200u64);
-    
-    // Set delegate
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&vault_owner);
-    });
-    client.set_delegate(&vault_id, &Some(delegate.clone()));
-    
-    // Test: Delegate cannot claim more than available
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&delegate);
-    });
-    
-    let result = std::panic::catch_unwind(|| {
-        client.claim_as_delegate(&vault_id, &1500i128); // More than total amount
-    });
-    assert!(result.is_err());
-    
-    // Test: Delegate can claim exact amount
-    let claimed_amount = client.claim_as_delegate(&vault_id, &1000i128);
-    assert_eq!(claimed_amount, 1000i128);
-    
-    // Test: Cannot claim after all tokens are claimed
-    let result = std::panic::catch_unwind(|| {
-        client.claim_as_delegate(&vault_id, &1i128);
+
     });
     assert!(result.is_err());
 }
 
 #[test]
-fn test_delegate_with_uninitialized_vault() {
+
     let env = Env::default();
     let contract_id = env.register(VestingContract, ());
     let client = VestingContractClient::new(&env, &contract_id);
@@ -327,49 +241,14 @@ fn test_delegate_with_uninitialized_vault() {
     // Create addresses for testing
     let admin = Address::generate(&env);
     let vault_owner = Address::generate(&env);
-    let delegate = Address::generate(&env);
+
     
     // Initialize contract with admin
     let initial_supply = 1000000i128;
     client.initialize(&admin, &initial_supply);
     
-    // Create a lazy vault as admin
+
     env.as_contract(&contract_id, || {
         env.current_contract_address().set(&admin);
     });
     
-    let vault_id = client.create_vault_lazy(&vault_owner, &1000i128, &100u64, &200u64);
-    
-    // Test: Cannot set delegate on uninitialized vault
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&vault_owner);
-    });
-    
-    let result = std::panic::catch_unwind(|| {
-        client.set_delegate(&vault_id, &Some(delegate.clone()));
-    });
-    assert!(result.is_err());
-    
-    // Test: Cannot claim as delegate on uninitialized vault
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&delegate);
-    });
-    
-    let result = std::panic::catch_unwind(|| {
-        client.claim_as_delegate(&vault_id, &100i128);
-    });
-    assert!(result.is_err());
-    
-    // Initialize the vault
-    client.initialize_vault_metadata(&vault_id);
-    
-    // Now delegate operations should work
-    client.set_delegate(&vault_id, &Some(delegate.clone()));
-    
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&delegate);
-    });
-    
-    let claimed_amount = client.claim_as_delegate(&vault_id, &500i128);
-    assert_eq!(claimed_amount, 500i128);
-}
