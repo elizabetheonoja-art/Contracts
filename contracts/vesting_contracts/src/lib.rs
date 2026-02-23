@@ -4,6 +4,9 @@ use soroban_sdk::{
     token, IntoVal, TryFromVal, try_from_val, ConversionError
 };
 
+mod factory;
+pub use factory::{VestingFactory, VestingFactoryClient};
+
 #[contract]
 pub struct VestingContract;
 
@@ -20,12 +23,13 @@ const PROPOSED_ADMIN: Symbol = Symbol::new(&"PROPOSED_ADMIN");
 #[contracttype]
 pub struct Vault {
     pub owner: Address,
+    pub delegate: Option<Address>, // Optional delegate address for claiming
     pub total_amount: i128,
     pub released_amount: i128,
     pub start_time: u64,
     pub end_time: u64,
     pub is_initialized: bool, // Lazy initialization flag
-    pub is_revocable: bool,   // Whether the vesting can be revoked by admin
+    pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
 }
 
 #[contracttype]
@@ -130,12 +134,13 @@ impl VestingContract {
         // Create vault with full initialization
         let vault = Vault {
             owner: owner.clone(),
+            delegate: None, // No delegate initially
             total_amount: amount,
             released_amount: 0,
             start_time,
             end_time,
             is_initialized: true, // Mark as fully initialized
-            is_revocable,
+            is_irrevocable: !is_revocable, // Convert from is_revocable parameter
         };
         
         // Store vault data immediately (expensive gas usage)
@@ -183,12 +188,13 @@ impl VestingContract {
         // Create vault with lazy initialization (minimal storage)
         let vault = Vault {
             owner: owner.clone(),
+            delegate: None, // No delegate initially
             total_amount: amount,
             released_amount: 0,
             start_time,
             end_time,
             is_initialized: false, // Mark as lazy initialized
-            is_revocable,
+            is_irrevocable: !is_revocable, // Convert from is_revocable parameter
         };
         
         // Store only essential data initially (cheaper gas)
@@ -223,12 +229,13 @@ impl VestingContract {
                 // Return empty vault if not found
                 Vault {
                     owner: Address::from_contract_id(&env.current_contract_address()),
+                    delegate: None,
                     total_amount: 0,
                     released_amount: 0,
                     start_time: 0,
                     end_time: 0,
                     is_initialized: false,
-                    is_revocable: false,
+                    is_irrevocable: false,
                 }
             });
         
@@ -346,6 +353,52 @@ impl VestingContract {
         );
     }
     
+    // Set delegate address for a vault (only owner can call)
+    pub fn set_delegate(env: Env, vault_id: u64, delegate: Option<Address>) {
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        require!(vault.is_initialized, "Vault not initialized");
+        
+        // Check if caller is the vault owner
+        let caller = env.current_contract_address();
+        require!(caller == vault.owner, "Only vault owner can set delegate");
+        
+        // Update delegate
+        vault.delegate = delegate;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+    }
+    
+    // Claim tokens as delegate (tokens still go to owner)
+    pub fn claim_as_delegate(env: Env, vault_id: u64, claim_amount: i128) -> i128 {
+        let vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        require!(vault.is_initialized, "Vault not initialized");
+        require!(claim_amount > 0, "Claim amount must be positive");
+        
+        // Check if caller is authorized delegate
+        let caller = env.current_contract_address();
+        require!(vault.delegate.is_some() && caller == vault.delegate.unwrap(), 
+                "Caller is not authorized delegate for this vault");
+        
+        let available_to_claim = vault.total_amount - vault.released_amount;
+        require!(claim_amount <= available_to_claim, "Insufficient tokens to claim");
+        
+        // Update vault (same as regular claim)
+        let mut updated_vault = vault.clone();
+        updated_vault.released_amount += claim_amount;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &updated_vault);
+        
+        claim_amount // Tokens go to original owner, not delegate
+    }
+    
     // Batch create vaults with lazy initialization
     pub fn batch_create_vaults_lazy(env: Env, batch_data: BatchCreateData) -> Vec<u64> {
         Self::require_admin(&env);
@@ -366,12 +419,13 @@ impl VestingContract {
             // Create vault with lazy initialization
             let vault = Vault {
                 owner: batch_data.recipients.get(i).unwrap(),
+                delegate: None, // No delegate initially
                 total_amount: batch_data.amounts.get(i).unwrap(),
                 released_amount: 0,
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 is_initialized: false, // Lazy initialization
-                is_revocable: true,    // Default to revocable for batch operations
+                is_irrevocable: false, // Default to revocable for batch operations
             };
             
             // Store vault data (minimal writes)
@@ -418,12 +472,13 @@ impl VestingContract {
             // Create vault with full initialization
             let vault = Vault {
                 owner: batch_data.recipients.get(i).unwrap(),
+                delegate: None, // No delegate initially
                 total_amount: batch_data.amounts.get(i).unwrap(),
                 released_amount: 0,
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 is_initialized: true, // Full initialization
-                is_revocable: true,   // Default to revocable for batch operations
+                is_irrevocable: false, // Default to revocable for batch operations
             };
             
             // Store vault data (expensive writes)
@@ -465,12 +520,13 @@ impl VestingContract {
             .unwrap_or_else(|| {
                 Vault {
                     owner: Address::from_contract_id(&env.current_contract_address()),
+                    delegate: None,
                     total_amount: 0,
                     released_amount: 0,
                     start_time: 0,
                     end_time: 0,
                     is_initialized: false,
-                    is_revocable: false,
+                    is_irrevocable: false,
                 }
             });
         
@@ -497,12 +553,13 @@ impl VestingContract {
                 .unwrap_or_else(|| {
                     Vault {
                         owner: user.clone(),
+                        delegate: None,
                         total_amount: 0,
                         released_amount: 0,
                         start_time: 0,
                         end_time: 0,
                         is_initialized: false,
-                        is_revocable: false,
+                        is_irrevocable: false,
                     }
                 });
             
@@ -525,8 +582,8 @@ impl VestingContract {
                 panic!("Vault not found");
             });
         
-        // Check if vault is revocable
-        require!(vault.is_revocable, "Vault is not revocable");
+        // Check if vault is revocable (not irrevocable)
+        require!(!vault.is_irrevocable, "Vault is not revocable");
         
         // Calculate vested and unvested amounts
         let vested_amount = Self::calculate_vested_amount(&env, &vault);
@@ -581,6 +638,9 @@ impl VestingContract {
                 panic!("Vault not found");
             });
         
+        // Security check: Cannot revoke from irrevocable vaults
+        require!(!vault.is_irrevocable, "Vault is irrevocable");
+        
         // Calculate amount to return (unreleased tokens)
         let unreleased_amount = vault.total_amount - vault.released_amount;
         require!(unreleased_amount > 0, "No tokens available to revoke");
@@ -604,6 +664,81 @@ impl VestingContract {
         );
         
         unreleased_amount
+    }
+    
+    // Revoke a specific amount of tokens from a vault and return them to admin
+    pub fn revoke_partial(env: Env, vault_id: u64, amount: i128) -> i128 {
+        Self::require_admin(&env);
+        
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        // Security check: Cannot revoke from irrevocable vaults
+        require!(!vault.is_irrevocable, "Vault is irrevocable");
+        
+        // Calculate unvested balance (tokens not yet released)
+        let unvested_balance = vault.total_amount - vault.released_amount;
+        require!(amount > 0, "Amount to revoke must be positive");
+        require!(amount <= unvested_balance, "Amount exceeds unvested balance");
+        
+        // Update vault to increase released amount by the specified amount
+        vault.released_amount += amount;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+        
+        // Return tokens to admin balance
+        let mut admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
+        admin_balance += amount;
+        env.storage().instance().set(&ADMIN_BALANCE, &admin_balance);
+        
+        // Get current timestamp
+        let timestamp = env.ledger().timestamp();
+        
+        // Emit TokensRevoked event
+        env.events().publish(
+            (Symbol::new(&env, "TokensRevoked"), vault_id),
+            (amount, timestamp),
+        );
+        
+        amount
+    }
+    
+    // Mark a vault as irrevocable to prevent admin withdrawal
+    pub fn mark_irrevocable(env: Env, vault_id: u64) {
+        Self::require_admin(&env);
+        
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        // Cannot mark already irrevocable vaults
+        require!(!vault.is_irrevocable, "Vault is already irrevocable");
+        
+        // Mark vault as irrevocable
+        vault.is_irrevocable = true;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+        
+        // Emit IrrevocableMarked event
+        let timestamp = env.ledger().timestamp();
+        env.events().publish(
+            (Symbol::new(&env, "IrrevocableMarked"), vault_id),
+            (timestamp),
+        );
+    }
+    
+    // Check if a vault is irrevocable
+    pub fn is_vault_irrevocable(env: Env, vault_id: u64) -> bool {
+        let vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+        
+        vault.is_irrevocable
     }
     
     // Get contract state for invariant checking

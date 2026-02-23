@@ -190,7 +190,6 @@ fn test_revoke_tokens() {
     let initial_supply = 1000000i128;
     client.initialize(&admin, &initial_supply);
     
-    // Create a vault
     env.as_contract(&contract_id, || {
         env.current_contract_address().set(&admin);
     });
@@ -213,13 +212,8 @@ fn test_revoke_tokens() {
         env.current_contract_address().set(&admin);
     });
     
-    let initial_admin_balance = 1000000i128 - vault_amount; // After vault creation
     let revoked_amount = client.revoke_tokens(&vault_id);
     assert_eq!(revoked_amount, vault_amount);
-    
-    // Verify admin balance increased
-    let final_admin_balance = initial_admin_balance + revoked_amount;
-    // Note: We can't directly check admin balance without a getter, but we can verify through invariant
     
     // Verify vault is fully released
     let vault = client.get_vault(&vault_id);
@@ -246,7 +240,6 @@ fn test_revoke_tokens_partial_claim() {
     let initial_supply = 1000000i128;
     client.initialize(&admin, &initial_supply);
     
-    // Create a vault
     env.as_contract(&contract_id, || {
         env.current_contract_address().set(&admin);
     });
@@ -282,7 +275,6 @@ fn test_revoke_tokens_event() {
     let initial_supply = 1000000i128;
     client.initialize(&admin, &initial_supply);
     
-    // Create a vault
     env.as_contract(&contract_id, || {
         env.current_contract_address().set(&admin);
     });
@@ -293,8 +285,7 @@ fn test_revoke_tokens_event() {
     // Revoke tokens and check event
     let revoked_amount = client.revoke_tokens(&vault_id);
     
-    // Verify the event was emitted (this would need to be checked with event listeners in a real scenario)
-    // For now, we just verify the function returns the correct amount
+    // Verify the function returns the correct amount
     assert_eq!(revoked_amount, vault_amount);
 }
 
@@ -655,5 +646,3 @@ fn test_revoke_nonexistent_vault_new() {
     });
     assert!(result.is_err());
 }
-
-
