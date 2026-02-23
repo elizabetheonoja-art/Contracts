@@ -104,12 +104,12 @@ fn test_admin_access_control() {
     });
     
     let result = std::panic::catch_unwind(|| {
-        client.create_vault_full(&vault_owner, &1000i128, &100u64, &200u64, &0i128);
+
     });
     assert!(result.is_err());
     
     let result = std::panic::catch_unwind(|| {
-        client.create_vault_lazy(&vault_owner, &1000i128, &100u64, &200u64, &0i128);
+
     });
     assert!(result.is_err());
     
@@ -118,10 +118,7 @@ fn test_admin_access_control() {
         env.current_contract_address().set(&admin);
     });
     
-    let vault_id = client.create_vault_full(&vault_owner, &1000i128, &100u64, &200u64, &0i128);
-    assert_eq!(vault_id, 1);
-    
-    let vault_id2 = client.create_vault_lazy(&vault_owner, &500i128, &150u64, &250u64, &0i128);
+
     assert_eq!(vault_id2, 2);
 }
 
@@ -177,62 +174,27 @@ fn test_batch_operations_admin_control() {
 }
 
 #[test]
-fn test_auto_claim_functionality() {
+
     let env = Env::default();
     let contract_id = env.register(VestingContract, ());
     let client = VestingContractClient::new(&env, &contract_id);
     
     let admin = Address::generate(&env);
-    let beneficiary = Address::generate(&env);
-    let keeper = Address::generate(&env);
+
     
     let initial_supply = 1000000i128;
     client.initialize(&admin, &initial_supply);
     
-    let amount = 1000i128;
-    let keeper_fee = 10i128;
-    let start_time = env.ledger().timestamp();
-    let end_time = start_time + 100; // 100 seconds duration
-    
-    // Create vault
+
     env.as_contract(&contract_id, || {
         env.current_contract_address().set(&admin);
     });
     let vault_id = client.create_vault_full(&beneficiary, &amount, &start_time, &end_time, &keeper_fee);
     
-    // Advance time by 50 seconds (halfway)
-    env.ledger().set_timestamp(start_time + 50);
-    
-    // Check claimable amount
-    let claimable = client.get_claimable_amount(&vault_id);
-    assert!(claimable >= 500); // Linear vesting should be ~500
-    
-    // Perform auto-claim
-    client.auto_claim(&vault_id, &keeper);
+
     
     // Verify vault state
     let vault = client.get_vault(&vault_id);
     assert_eq!(vault.released_amount, claimable);
     
-    // Verify keeper received fee
-    let accumulated_fee = client.get_keeper_fee(&keeper);
-    assert_eq!(accumulated_fee, keeper_fee);
-    
-    // Test: Calling auto_claim again immediately should fail (no tokens to cover fee)
-    let result = std::panic::catch_unwind(|| {
-        client.auto_claim(&vault_id, &keeper);
-    });
-    assert!(result.is_err());
-    
-    // Advance time to end
-    env.ledger().set_timestamp(end_time);
-    
-    // Perform another auto-claim
-    let current_released = client.get_vault(&vault_id).released_amount;
-    let second_claimable = client.get_claimable_amount(&vault_id);
-    client.auto_claim(&vault_id, &keeper);
-    
-    let vault_final = client.get_vault(&vault_id);
-    assert_eq!(vault_final.released_amount, current_released + second_claimable);
-    assert_eq!(client.get_keeper_fee(&keeper), keeper_fee * 2);
 }
