@@ -23,6 +23,7 @@ pub struct Vault {
     pub is_initialized: bool, // Lazy initialization flag
     pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
     pub creation_time: u64, // Timestamp of creation for clawback grace period
+    pub is_transferable: bool, // Can the beneficiary transfer this vault?
 }
 
 #[contracttype]
@@ -210,6 +211,7 @@ impl VestingContract {
             is_initialized: true,
             is_irrevocable: !is_revocable,
             creation_time: now,
+            is_transferable,
         };
 
         // Store vault data immediately (expensive gas usage)
@@ -288,6 +290,7 @@ impl VestingContract {
             is_initialized: false, // Mark as lazy initialized
             is_irrevocable: !is_revocable, // Convert from is_revocable parameter
             creation_time: now,
+            is_transferable,
         };
 
         // Store only essential data initially (cheaper gas)
@@ -649,6 +652,7 @@ impl VestingContract {
                 is_initialized: false, // Lazy initialization
                 is_irrevocable: false, // Default to revocable for batch operations
                 creation_time: now,
+                is_transferable: false, // Default to non-transferable for batch
             };
 
             // Store vault data (minimal writes)
@@ -721,6 +725,7 @@ impl VestingContract {
                 is_initialized: true,
                 is_irrevocable: false, // Default to revocable for batch operations
                 creation_time: now,
+                is_transferable: false, // Default to non-transferable for batch
             };
 
             // Store vault data (expensive writes)
@@ -954,6 +959,76 @@ impl VestingContract {
         );
 
         vault.total_amount
+    }
+
+    // Transfer vault ownership to another beneficiary (if transferable)
+    pub fn transfer_vault(env: Env, vault_id: u64, new_beneficiary: Address) {
+        let mut vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+
+        if !vault.is_initialized {
+            panic!("Vault not initialized");
+        }
+
+        if !vault.is_transferable {
+            panic!("Vault is non-transferable");
+        }
+
+        // Check if caller is the vault owner
+        let caller = env.current_contract_address();
+        if caller != vault.owner {
+            panic!("Only vault owner can transfer");
+        }
+
+        let old_owner = vault.owner.clone();
+
+        // Update UserVaults
+        // Remove from old owner
+        let mut old_user_vaults: Vec<u64> = env
+            .storage()
+            .instance()
+            .get(&DataKey::UserVaults(old_owner.clone()))
+            .unwrap_or(Vec::new(&env));
+        
+        let mut new_old_user_vaults = Vec::new(&env);
+        for id in old_user_vaults.iter() {
+            if id != vault_id {
+                new_old_user_vaults.push_back(id);
+            }
+        }
+        env.storage()
+            .instance()
+            .set(&DataKey::UserVaults(old_owner.clone()), &new_old_user_vaults);
+
+        // Add to new owner
+        let mut new_user_vaults: Vec<u64> = env
+            .storage()
+            .instance()
+            .get(&DataKey::UserVaults(new_beneficiary.clone()))
+            .unwrap_or(Vec::new(&env));
+        new_user_vaults.push_back(vault_id);
+        env.storage()
+            .instance()
+            .set(&DataKey::UserVaults(new_beneficiary.clone()), &new_user_vaults);
+
+        // Update vault
+        vault.owner = new_beneficiary.clone();
+        vault.delegate = None; // Reset delegate on transfer
+        
+        env.storage()
+            .instance()
+            .set(&DataKey::VaultData(vault_id), &vault);
+
+        // Emit event
+        env.events().publish(
+            (Symbol::new(&env, "VaultTransferred"), vault_id),
+            (old_owner, new_beneficiary),
+        );
     }
 
     // Mark a vault as irrevocable to prevent admin withdrawal
