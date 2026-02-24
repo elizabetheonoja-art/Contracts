@@ -25,6 +25,7 @@ pub struct Vault {
     pub creation_time: u64, // Timestamp of creation for clawback grace period
     pub is_transferable: bool, // Can the beneficiary transfer this vault?
     pub step_duration: u64, // Duration of each vesting step in seconds (0 = linear)
+    pub staked_amount: i128, // Amount currently staked in external contract
 }
 
 #[contracttype]
@@ -215,6 +216,7 @@ impl VestingContract {
             creation_time: now,
             is_transferable,
             step_duration,
+            staked_amount: 0,
         };
 
         // Store vault data immediately (expensive gas usage)
@@ -295,6 +297,7 @@ impl VestingContract {
             creation_time: now,
             is_transferable,
             step_duration,
+            staked_amount: 0,
         };
 
         // Store only essential data initially (cheaper gas)
@@ -405,6 +408,25 @@ impl VestingContract {
             // Fallback to time-based vesting
             Self::calculate_time_vested_amount(&env, &vault)
         };
+
+        // Auto-unstake logic if needed
+        let liquid_balance = vault.total_amount - vault.released_amount - vault.staked_amount;
+        if claim_amount > liquid_balance {
+            let deficit = claim_amount - liquid_balance;
+            
+            // Get staking contract
+            let staking_contract: Address = env.storage().instance()
+                .get(&Symbol::new(&env, "StakingContract"))
+                .expect("Staking contract not set");
+
+            // Call unstake on external contract
+            let args = vec![&env, vault_id.into_val(&env), deficit.into_val(&env)];
+            env.invoke_contract::<()>(&staking_contract, &Symbol::new(&env, "unstake"), args);
+
+            // Update local state
+            vault.staked_amount -= deficit;
+            // Note: We don't save vault here yet, it's saved at the end of function
+        }
 
         let available_to_claim = unlocked_amount - vault.released_amount;
         if available_to_claim <= 0 {
@@ -689,6 +711,7 @@ impl VestingContract {
                 creation_time: now,
                 is_transferable: false, // Default to non-transferable for batch
                 step_duration: batch_data.step_durations.get(i).unwrap_or(0),
+                staked_amount: 0,
             };
 
             // Store vault data (minimal writes)
@@ -763,6 +786,7 @@ impl VestingContract {
                 creation_time: now,
                 is_transferable: false, // Default to non-transferable for batch
                 step_duration: batch_data.step_durations.get(i).unwrap_or(0),
+                staked_amount: 0,
             };
 
             // Store vault data (expensive writes)
@@ -1066,6 +1090,55 @@ impl VestingContract {
             (Symbol::new(&env, "VaultTransferred"), vault_id),
             (old_owner, new_beneficiary),
         );
+    }
+
+    // Set the whitelisted staking contract address
+    pub fn set_staking_contract(env: Env, contract: Address) {
+        Self::require_admin(&env);
+        env.storage().instance().set(&Symbol::new(&env, "StakingContract"), &contract);
+    }
+
+    // Stake unvested tokens to the whitelisted staking contract
+    pub fn stake_tokens(env: Env, vault_id: u64, amount: i128, validator: Address) {
+        let mut vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+
+        if !vault.is_initialized {
+            panic!("Vault not initialized");
+        }
+
+        // Check auth (owner or delegate?) - usually owner
+        let caller = env.current_contract_address();
+        if caller != vault.owner {
+            panic!("Only vault owner can stake");
+        }
+
+        // Check available balance (total - released - staked)
+        let available = vault.total_amount - vault.released_amount - vault.staked_amount;
+        if amount <= 0 {
+            panic!("Amount must be positive");
+        }
+        if amount > available {
+            panic!("Insufficient funds to stake");
+        }
+
+        // Get staking contract
+        let staking_contract: Address = env.storage().instance()
+            .get(&Symbol::new(&env, "StakingContract"))
+            .expect("Staking contract not set");
+
+        // Call stake on external contract
+        let args = vec![&env, vault_id.into_val(&env), amount.into_val(&env), validator.into_val(&env)];
+        env.invoke_contract::<()>(&staking_contract, &Symbol::new(&env, "stake"), args);
+
+        // Update vault state
+        vault.staked_amount += amount;
+        env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
     }
 
     // Mark a vault as irrevocable to prevent admin withdrawal

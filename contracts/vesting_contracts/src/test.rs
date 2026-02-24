@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{vec, Env, Address};
+use soroban_sdk::{vec, Env, Address, contract, contractimpl};
 
 #[test]
 fn test_admin_ownership_transfer() {
@@ -238,4 +238,73 @@ fn test_step_vesting_fuzz() {
     // Verify vault state
     let vault = client.get_vault(&vault_id);
     assert_eq!(vault.released_amount, total_amount);
+}
+
+// Mock Staking Contract for testing cross-contract calls
+#[contract]
+pub struct MockStakingContract;
+
+#[contractimpl]
+impl MockStakingContract {
+    pub fn stake(env: Env, vault_id: u64, amount: i128, _validator: Address) {
+        env.events().publish((Symbol::new(&env, "stake"), vault_id), amount);
+    }
+    pub fn unstake(env: Env, vault_id: u64, amount: i128) {
+        env.events().publish((Symbol::new(&env, "unstake"), vault_id), amount);
+    }
+}
+
+#[test]
+fn test_staking_integration() {
+    let env = Env::default();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    // Register mock staking contract
+    let staking_contract_id = env.register(MockStakingContract, ());
+    let staking_client = MockStakingContractClient::new(&env, &staking_contract_id);
+
+    let admin = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+    let validator = Address::generate(&env);
+
+    let initial_supply = 1_000_000i128;
+    client.initialize(&admin, &initial_supply);
+
+    // Set staking contract
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    client.set_staking_contract(&staking_contract_id);
+
+    // Create vault
+    let total_amount = 1000i128;
+    let now = env.ledger().timestamp();
+    let vault_id = client.create_vault_full(
+        &beneficiary, &total_amount, &now, &(now + 1000), &0i128, &true, &true, &0u64
+    );
+
+    // Stake tokens as beneficiary
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&beneficiary);
+    });
+    
+    let stake_amount = 500i128;
+    client.stake_tokens(&vault_id, &stake_amount, &validator);
+
+    // Verify vault state
+    let vault = client.get_vault(&vault_id);
+    assert_eq!(vault.staked_amount, stake_amount);
+
+    // Fast forward to end of vesting
+    env.ledger().with_mut(|li| {
+        li.timestamp = now + 1001;
+    });
+
+    // Claim ALL tokens (should trigger auto-unstake)
+    client.claim_tokens(&vault_id, &total_amount);
+
+    let vault_final = client.get_vault(&vault_id);
+    assert_eq!(vault_final.staked_amount, 0);
+    assert_eq!(vault_final.released_amount, total_amount);
 }
