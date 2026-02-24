@@ -495,9 +495,9 @@ impl VestingContract {
             .instance()
             .set(&DataKey::VaultData(vault_id), &vault);
 
-        // Emit BeneficiaryChanged event
+        // Emit BeneficiaryUpdated event
         env.events().publish(
-            (Symbol::new(&env, "BeneficiaryChanged"), vault_id),
+            (Symbol::new(&env, "BeneficiaryUpdated"), vault_id),
             (old_owner.clone(), new_address),
         );
     }
@@ -522,11 +522,19 @@ impl VestingContract {
             panic!("Only vault owner can set delegate");
         }
 
+        let old_delegate = vault.delegate.clone();
+
         // Update delegate
-        vault.delegate = delegate;
+        vault.delegate = delegate.clone();
         env.storage()
             .instance()
             .set(&DataKey::VaultData(vault_id), &vault);
+
+        // Emit DelegateUpdated event
+        env.events().publish(
+            (Symbol::new(&env, "DelegateUpdated"), vault_id),
+            (old_delegate, delegate),
+        );
     }
 
     // Claim tokens as delegate (tokens still go to owner)
@@ -1087,7 +1095,7 @@ impl VestingContract {
 
         // Emit event
         env.events().publish(
-            (Symbol::new(&env, "VaultTransferred"), vault_id),
+            (Symbol::new(&env, "BeneficiaryUpdated"), vault_id),
             (old_owner, new_beneficiary),
         );
     }
