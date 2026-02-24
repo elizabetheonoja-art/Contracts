@@ -32,5 +32,39 @@ Introduces the `VestingCurve` enum to support both **Linear** and **Exponential*
 - [x] Enforce immutable curve at initialization  
 - [x] Implement incremental claim logic  
 - [x] Write 11 unit/integration tests for both curves  
-- [x] Build & deploy WASM contract to Stellar Testnet  
+- [x] Build & deploy WASM contract to Stellar Testnet
+
+---
+
+## Mathematical Behavior & Visuals
+
+### Linear Vesting
+Formula: `vested = total * elapsed / duration`
+
+```mermaid
+graph LR
+  S[Start] --> T[Time]
+  T --> V[Tokens vested = total * elapsed / duration]
+```
+
+### Step-based Vesting
+Formula: `vested = sum of unlocked steps`
+
+```mermaid
+graph LR
+  S2[Start] --> T2[Time]
+  T2 --> U[Tokens vested = sum of unlocked steps]
+```
+
+### Cliff Vesting
+Formula: `vested = 0 if before cliff, else linear`
+
+```mermaid
+graph LR
+  S3[Start] --> C[Cliff]
+  C --> T3[Time]
+  T3 --> W[Tokens vested = 0 if before cliff, else linear]
+```
+
+Each chart visually compares the vesting schedule. The formula shown is exactly what is used in the Rust contract code.
 
