@@ -412,3 +412,48 @@ fn test_lockup_only_mode() {
     let vault = client.get_vault(&vault_id);
     assert_eq!(vault.released_amount, total_amount);
 }
+
+#[test]
+fn test_vault_start_time_immutable() {
+    let env = Env::default();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let initial_supply = 1000000i128;
+    client.initialize(&admin, &initial_supply);
+
+    // Create a vault
+    let owner = Address::generate(&env);
+    let amount = 1000i128;
+    let start_time = 123456789u64;
+    let end_time = start_time + 10000;
+    let keeper_fee = 10i128;
+    let is_revocable = false;
+    let is_transferable = false;
+    let step_duration = 0u64;
+    let vault_id = client.create_vault(
+        &owner,
+        &amount,
+        &start_time,
+        &end_time,
+        &keeper_fee,
+        &is_revocable,
+        &is_transferable,
+        &step_duration,
+    );
+
+    // Try to change start_time or cliff_duration (should not be possible)
+    let vault = client.get_vault(&vault_id);
+    let original_start_time = vault.start_time;
+    let original_cliff_duration = vault.cliff_duration;
+
+    // Attempt to update vault via admin functions (should not affect start_time/cliff_duration)
+    client.mark_irrevocable(&vault_id);
+    client.transfer_beneficiary(&vault_id, &Address::generate(&env));
+    client.set_delegate(&vault_id, &Some(Address::generate(&env)));
+
+    let updated_vault = client.get_vault(&vault_id);
+    assert_eq!(updated_vault.start_time, original_start_time);
+    assert_eq!(updated_vault.cliff_duration, original_cliff_duration);
+}
