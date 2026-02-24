@@ -1,6 +1,12 @@
 #![no_std]
 use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Map, Symbol, Vec};
 
+// DataKey for whitelisted tokens
+#[contracttype]
+pub enum WhitelistDataKey {
+    WhitelistedTokens,
+}
+
 mod factory;
 pub use factory::{VestingFactory, VestingFactoryClient};
 
@@ -67,6 +73,19 @@ pub struct VaultCreated {
 #[contractimpl]
 #[allow(deprecated)]
 impl VestingContract {
+        // Admin-only: Add token to whitelist
+        pub fn add_to_whitelist(env: Env, token: Address) {
+            Self::require_admin(&env);
+            let mut whitelist: Map<Address, bool> = env.storage().instance().get(&WhitelistDataKey::WhitelistedTokens).unwrap_or(Map::new(&env));
+            whitelist.set(token.clone(), true);
+            env.storage().instance().set(&WhitelistDataKey::WhitelistedTokens, &whitelist);
+        }
+
+        // Check if token is whitelisted
+        fn is_token_whitelisted(env: &Env, token: &Address) -> bool {
+            let whitelist: Map<Address, bool> = env.storage().instance().get(&WhitelistDataKey::WhitelistedTokens).unwrap_or(Map::new(env));
+            whitelist.get(token.clone()).unwrap_or(false)
+        }
     // Initialize contract with initial supply
     pub fn initialize(env: Env, admin: Address, initial_supply: i128) {
         // Set initial supply
@@ -84,6 +103,10 @@ impl VestingContract {
 
         // Initialize vault count
         env.storage().instance().set(&DataKey::VaultCount, &0u64);
+
+        // Initialize whitelisted tokens map
+        let whitelist: Map<Address, bool> = Map::new(&env);
+        env.storage().instance().set(&WhitelistDataKey::WhitelistedTokens, &whitelist);
     }
 
     // Helper function to check if caller is admin
