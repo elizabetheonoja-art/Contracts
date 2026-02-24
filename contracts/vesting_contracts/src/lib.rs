@@ -22,6 +22,7 @@ pub struct Vault {
     pub keeper_fee: i128, // Fee paid to anyone who triggers auto_claim
     pub is_initialized: bool, // Lazy initialization flag
     pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
+    pub creation_time: u64, // Timestamp of creation for clawback grace period
 }
 
 #[contracttype]
@@ -195,6 +196,8 @@ impl VestingContract {
             .instance()
             .set(&DataKey::AdminBalance, &admin_balance);
 
+        let now = env.ledger().timestamp();
+
         // Create vault with full initialization
         let vault = Vault {
             owner: owner.clone(),
@@ -203,7 +206,10 @@ impl VestingContract {
             released_amount: 0,
             start_time,
             end_time,
-<
+            keeper_fee,
+            is_initialized: true,
+            is_irrevocable: !is_revocable,
+            creation_time: now,
         };
 
         // Store vault data immediately (expensive gas usage)
@@ -228,7 +234,6 @@ impl VestingContract {
             .set(&DataKey::VaultCount, &vault_count);
 
         // Emit VaultCreated event with strictly typed fields
-        let now = env.ledger().timestamp();
         let cliff_duration = start_time.saturating_sub(now);
         let vault_created = VaultCreated {
             vault_id: vault_count,
@@ -269,6 +274,8 @@ impl VestingContract {
             .instance()
             .set(&DataKey::AdminBalance, &admin_balance);
 
+        let now = env.ledger().timestamp();
+
         // Create vault with lazy initialization (minimal storage)
         let vault = Vault {
             owner: owner.clone(),
@@ -280,6 +287,7 @@ impl VestingContract {
             keeper_fee,
             is_initialized: false, // Mark as lazy initialized
             is_irrevocable: !is_revocable, // Convert from is_revocable parameter
+            creation_time: now,
         };
 
         // Store only essential data initially (cheaper gas)
@@ -295,7 +303,6 @@ impl VestingContract {
         // Don't update user vaults list yet (lazy)
 
         // Emit VaultCreated event with strictly typed fields
-        let now = env.ledger().timestamp();
         let cliff_duration = start_time.saturating_sub(now);
         let vault_created = VaultCreated {
             vault_id: vault_count,
@@ -626,6 +633,7 @@ impl VestingContract {
             .instance()
             .set(&DataKey::AdminBalance, &admin_balance);
 
+        let now = env.ledger().timestamp();
         for i in 0..batch_data.recipients.len() {
             let vault_id = initial_count + i as u64 + 1;
 
@@ -640,6 +648,7 @@ impl VestingContract {
                 keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
                 is_initialized: false, // Lazy initialization
                 is_irrevocable: false, // Default to revocable for batch operations
+                creation_time: now,
             };
 
             // Store vault data (minimal writes)
@@ -648,7 +657,6 @@ impl VestingContract {
                 .set(&DataKey::VaultData(vault_id), &vault);
             vault_ids.push_back(vault_id);
             // Emit VaultCreated event for each created vault
-            let now = env.ledger().timestamp();
             let start_time = batch_data.start_times.get(i).unwrap();
             let cliff_duration = start_time.saturating_sub(now);
             let vault_created = VaultCreated {
@@ -697,6 +705,7 @@ impl VestingContract {
             .instance()
             .set(&DataKey::AdminBalance, &admin_balance);
 
+        let now = env.ledger().timestamp();
         for i in 0..batch_data.recipients.len() {
             let vault_id = initial_count + i as u64 + 1;
 
@@ -708,7 +717,11 @@ impl VestingContract {
                 released_amount: 0,
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
- };
+                keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
+                is_initialized: true,
+                is_irrevocable: false, // Default to revocable for batch operations
+                creation_time: now,
+            };
 
             // Store vault data (expensive writes)
             env.storage()
@@ -728,7 +741,6 @@ impl VestingContract {
 
             vault_ids.push_back(vault_id);
             // Emit VaultCreated event for each created vault
-            let now = env.ledger().timestamp();
             let start_time = batch_data.start_times.get(i).unwrap();
             let cliff_duration = start_time.saturating_sub(now);
             let vault_created = VaultCreated {
@@ -893,6 +905,55 @@ impl VestingContract {
         );
 
         amount
+    }
+
+    // Clawback a vault within the grace period (1 hour)
+    pub fn clawback_vault(env: Env, vault_id: u64) -> i128 {
+        Self::require_admin(&env);
+
+        let mut vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+
+        let now = env.ledger().timestamp();
+        let grace_period = 3600; // 1 hour in seconds
+
+        if now > vault.creation_time + grace_period {
+            panic!("Grace period expired");
+        }
+
+        if vault.released_amount > 0 {
+            panic!("Tokens already claimed");
+        }
+
+        // Refund admin
+        let mut admin_balance: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::AdminBalance)
+            .unwrap_or(0);
+        admin_balance += vault.total_amount;
+        env.storage()
+            .instance()
+            .set(&DataKey::AdminBalance, &admin_balance);
+
+        // Mark as released/revoked so it can't be claimed
+        vault.released_amount = vault.total_amount;
+        env.storage()
+            .instance()
+            .set(&DataKey::VaultData(vault_id), &vault);
+
+        // Emit event
+        env.events().publish(
+            (Symbol::new(&env, "VaultClawedBack"), vault_id),
+            vault.total_amount,
+        );
+
+        vault.total_amount
     }
 
     // Mark a vault as irrevocable to prevent admin withdrawal
