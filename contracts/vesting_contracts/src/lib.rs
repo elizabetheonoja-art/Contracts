@@ -24,6 +24,7 @@ pub struct Vault {
     pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
     pub creation_time: u64, // Timestamp of creation for clawback grace period
     pub is_transferable: bool, // Can the beneficiary transfer this vault?
+    pub step_duration: u64, // Duration of each vesting step in seconds (0 = linear)
 }
 
 #[contracttype]
@@ -41,6 +42,7 @@ pub struct BatchCreateData {
     pub start_times: Vec<u64>,
     pub end_times: Vec<u64>,
     pub keeper_fees: Vec<i128>,
+    pub step_durations: Vec<u64>,
 }
 
 #[contracttype]
@@ -212,6 +214,7 @@ impl VestingContract {
             is_irrevocable: !is_revocable,
             creation_time: now,
             is_transferable,
+            step_duration,
         };
 
         // Store vault data immediately (expensive gas usage)
@@ -291,6 +294,7 @@ impl VestingContract {
             is_irrevocable: !is_revocable, // Convert from is_revocable parameter
             creation_time: now,
             is_transferable,
+            step_duration,
         };
 
         // Store only essential data initially (cheaper gas)
@@ -351,6 +355,30 @@ impl VestingContract {
         }
     }
 
+    // Helper to calculate vested amount based on time (linear or step)
+    fn calculate_time_vested_amount(env: &Env, vault: &Vault) -> i128 {
+        let now = env.ledger().timestamp();
+        if now < vault.start_time {
+            return 0;
+        }
+        if now >= vault.end_time {
+            return vault.total_amount;
+        }
+        let duration = vault.end_time - vault.start_time;
+        if duration == 0 {
+            return vault.total_amount;
+        }
+        let elapsed = now - vault.start_time;
+        let effective_elapsed = if vault.step_duration > 0 {
+            (elapsed / vault.step_duration) * vault.step_duration
+        } else {
+            elapsed
+        };
+        
+        // Use i128 math
+        (vault.total_amount * effective_elapsed as i128) / duration as i128
+    }
+
     // Claim tokens from vault
     pub fn claim_tokens(env: Env, vault_id: u64, claim_amount: i128) -> i128 {
         let mut vault: Vault = env
@@ -368,9 +396,16 @@ impl VestingContract {
             panic!("Claim amount must be positive");
         }
 
-        let milestones = Self::require_milestones_configured(&env, vault_id);
-        let unlocked_pct = Self::unlocked_percentage(&milestones);
-        let unlocked_amount = Self::unlocked_amount(vault.total_amount, unlocked_pct);
+        // Check if milestones are configured
+        let unlocked_amount = if env.storage().instance().has(&DataKey::VaultMilestones(vault_id)) {
+            let milestones = Self::require_milestones_configured(&env, vault_id);
+            let unlocked_pct = Self::unlocked_percentage(&milestones);
+            Self::unlocked_amount(vault.total_amount, unlocked_pct)
+        } else {
+            // Fallback to time-based vesting
+            Self::calculate_time_vested_amount(&env, &vault)
+        };
+
         let available_to_claim = unlocked_amount - vault.released_amount;
         if available_to_claim <= 0 {
             panic!("No tokens available to claim");
@@ -653,6 +688,7 @@ impl VestingContract {
                 is_irrevocable: false, // Default to revocable for batch operations
                 creation_time: now,
                 is_transferable: false, // Default to non-transferable for batch
+                step_duration: batch_data.step_durations.get(i).unwrap_or(0),
             };
 
             // Store vault data (minimal writes)
@@ -726,6 +762,7 @@ impl VestingContract {
                 is_irrevocable: false, // Default to revocable for batch operations
                 creation_time: now,
                 is_transferable: false, // Default to non-transferable for batch
+                step_duration: batch_data.step_durations.get(i).unwrap_or(0),
             };
 
             // Store vault data (expensive writes)
@@ -1127,26 +1164,7 @@ impl VestingContract {
             .get(&VAULT_DATA, &vault_id)
             .unwrap_or_else(|| panic!("Vault not found"));
 
-        let now = env.ledger().timestamp();
-        
-        if now <= vault.start_time {
-            return 0;
-        }
-
-        let elapsed = if now >= vault.end_time {
-            vault.end_time - vault.start_time
-        } else {
-            now - vault.start_time
-        };
-
-        let total_duration = vault.end_time - vault.start_time;
-        
-        let vested = if total_duration > 0 {
-            // Use i128 for calculation to prevent overflow then back to i128
-            (vault.total_amount * elapsed as i128) / total_duration as i128
-        } else {
-            vault.total_amount
-        };
+        let vested = Self::calculate_time_vested_amount(&env, &vault);
 
         if vested > vault.released_amount {
             vested - vault.released_amount

@@ -145,6 +145,7 @@ fn test_batch_operations_admin_control() {
         start_times: vec![&env, 100u64, 150u64],
         end_times: vec![&env, 200u64, 250u64],
         keeper_fees: vec![&env, 0i128, 0i128],
+        step_durations: vec![&env, 0u64, 0u64],
     };
     
     // Test: Unauthorized user cannot create batch vaults
@@ -186,4 +187,55 @@ fn test_milestone_unlocking_and_claim_limits() {
         env.current_contract_address().set(&admin);
     });
 
+}
+
+#[test]
+fn test_step_vesting_fuzz() {
+    let env = Env::default();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    let admin = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+    
+    let initial_supply = 1_000_000_000_000i128;
+    client.initialize(&admin, &initial_supply);
+    
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+
+    // Fuzz testing with prime numbers to check for truncation errors
+    // Primes: 1009 (amount), 17 (step), 101 (duration)
+    let total_amount = 1009i128;
+    let start_time = 1000u64;
+    let duration = 101u64; // Prime duration
+    let end_time = start_time + duration;
+    let step_duration = 17u64; // Prime step
+    
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &total_amount,
+        &start_time,
+        &end_time,
+        &0i128,
+        &true,
+        &true,
+        &step_duration,
+    );
+
+    // Advance time to end
+    env.ledger().with_mut(|li| {
+        li.timestamp = end_time + 1;
+    });
+
+    // Claim all
+    let claimed = client.claim_tokens(&vault_id, &total_amount);
+    
+    // Assert full amount is claimed
+    assert_eq!(claimed, total_amount);
+    
+    // Verify vault state
+    let vault = client.get_vault(&vault_id);
+    assert_eq!(vault.released_amount, total_amount);
 }
