@@ -352,3 +352,63 @@ fn test_rotate_beneficiary_key() {
     let new_vaults = client.get_user_vaults(&new_beneficiary);
     assert_eq!(new_vaults.get(0).unwrap(), vault_id);
 }
+
+#[test]
+fn test_lockup_only_mode() {
+    let env = Env::default();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    let admin = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+    
+    let initial_supply = 1_000_000i128;
+    client.initialize(&admin, &initial_supply);
+    
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+
+    let now = env.ledger().timestamp();
+    let duration = 31536000u64; // 1 year
+    let start_time = now;
+    let end_time = now + duration;
+    let total_amount = 100_000i128;
+    
+    // Set step_duration equal to total duration -> Lockup Only
+    let step_duration = duration;
+
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &total_amount,
+        &start_time,
+        &end_time,
+        &0i128,
+        &true,
+        &false,
+        &step_duration,
+    );
+
+    // Check just before end (should be 0 vested)
+    env.ledger().with_mut(|li| {
+        li.timestamp = end_time - 1;
+    });
+    
+    // Attempt to claim should fail as nothing is vested
+    let result = std::panic::catch_unwind(|| {
+        client.claim_tokens(&vault_id, &1i128);
+    });
+    assert!(result.is_err());
+
+    // Check at end (should be 100% vested)
+    env.ledger().with_mut(|li| {
+        li.timestamp = end_time;
+    });
+    
+    // Should be able to claim full amount
+    let claimed = client.claim_tokens(&vault_id, &total_amount);
+    assert_eq!(claimed, total_amount);
+    
+    let vault = client.get_vault(&vault_id);
+    assert_eq!(vault.released_amount, total_amount);
+}
