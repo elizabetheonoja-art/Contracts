@@ -30,12 +30,20 @@ impl VestingFactory {
     }
 
     /// Deploy a new vesting contract for an organization
-    pub fn deploy_new_vault_contract(env: Env, admin: Address, initial_supply: i128) -> Address {
+    /// Only allows deployment if token is whitelisted
+    pub fn deploy_new_vault_contract(env: Env, admin: Address, initial_supply: i128, token: Address) -> Address {
         let _wasm_hash: BytesN<32> = env
             .storage()
             .instance()
             .get(&DataKey::WasmHash)
             .unwrap_or_else(|| panic!("Factory not initialized - WASM hash not set"));
+
+        // Check token whitelist
+        let whitelist: Map<Address, bool> = env.storage().instance().get(&crate::WhitelistDataKey::WhitelistedTokens).unwrap_or(Map::new(&env));
+        if !whitelist.get(token.clone()).unwrap_or(false) {
+            panic!("Token not whitelisted");
+        }
+
         let _ = (admin, initial_supply);
         panic!("Factory deployment is not implemented for this soroban-sdk version");
     }
