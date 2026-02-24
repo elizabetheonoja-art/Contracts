@@ -1100,6 +1100,69 @@ impl VestingContract {
         );
     }
 
+    // Rotate beneficiary key (security feature, allows self-transfer even if non-transferable)
+    pub fn rotate_beneficiary_key(env: Env, vault_id: u64, new_address: Address) {
+        let mut vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
+
+        if !vault.is_initialized {
+            panic!("Vault not initialized");
+        }
+
+        // Require authorization from the current owner
+        vault.owner.require_auth();
+
+        let old_owner = vault.owner.clone();
+
+        // Update UserVaults
+        // Remove from old owner
+        let mut old_user_vaults: Vec<u64> = env
+            .storage()
+            .instance()
+            .get(&DataKey::UserVaults(old_owner.clone()))
+            .unwrap_or(Vec::new(&env));
+        
+        let mut new_old_user_vaults = Vec::new(&env);
+        for id in old_user_vaults.iter() {
+            if id != vault_id {
+                new_old_user_vaults.push_back(id);
+            }
+        }
+        env.storage()
+            .instance()
+            .set(&DataKey::UserVaults(old_owner.clone()), &new_old_user_vaults);
+
+        // Add to new owner
+        let mut new_user_vaults: Vec<u64> = env
+            .storage()
+            .instance()
+            .get(&DataKey::UserVaults(new_address.clone()))
+            .unwrap_or(Vec::new(&env));
+        new_user_vaults.push_back(vault_id);
+        env.storage()
+            .instance()
+            .set(&DataKey::UserVaults(new_address.clone()), &new_user_vaults);
+
+        // Update vault
+        vault.owner = new_address.clone();
+        vault.delegate = None; // Reset delegate on rotation for security
+        
+        env.storage()
+            .instance()
+            .set(&DataKey::VaultData(vault_id), &vault);
+
+        // Emit BeneficiaryRotated event
+        env.events().publish(
+            (Symbol::new(&env, "BeneficiaryRotated"), vault_id),
+            (old_owner, new_address),
+        );
+    }
+
     // Set the whitelisted staking contract address
     pub fn set_staking_contract(env: Env, contract: Address) {
         Self::require_admin(&env);

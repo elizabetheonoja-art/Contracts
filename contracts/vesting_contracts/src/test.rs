@@ -308,3 +308,47 @@ fn test_staking_integration() {
     assert_eq!(vault_final.staked_amount, 0);
     assert_eq!(vault_final.released_amount, total_amount);
 }
+
+#[test]
+fn test_rotate_beneficiary_key() {
+    let env = Env::default();
+    env.mock_all_auths(); // Enable auth mocking for require_auth
+
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    let admin = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+    let new_beneficiary = Address::generate(&env);
+    
+    let initial_supply = 1_000_000i128;
+    client.initialize(&admin, &initial_supply);
+    
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+
+    // Create vault (non-transferable to test rotation bypass)
+    let now = env.ledger().timestamp();
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &1000i128,
+        &now,
+        &(now + 1000),
+        &0i128,
+        &true, // revocable
+        &false, // NOT transferable
+        &0u64, // step
+    );
+
+    // Rotate key
+    client.rotate_beneficiary_key(&vault_id, &new_beneficiary);
+
+    // Verify new owner
+    let vault_updated = client.get_vault(&vault_id);
+    assert_eq!(vault_updated.owner, new_beneficiary);
+
+    // Verify UserVaults
+    let new_vaults = client.get_user_vaults(&new_beneficiary);
+    assert_eq!(new_vaults.get(0).unwrap(), vault_id);
+}
