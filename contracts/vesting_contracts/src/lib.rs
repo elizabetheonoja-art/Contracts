@@ -55,18 +55,25 @@ pub enum DataKey {
 
 #[contracttype]
 #[derive(Clone)]
+// NOTE: `#[contracttype]` structs serialize by field order (tuple-style).
+// Reordering fields is a storage schema change; only do this pre-deploy or with migration.
 pub struct Vault {
-    pub owner: Address,
-    pub delegate: Option<Address>,
     pub total_amount: i128, // = initial_deposit_shares
     pub released_amount: i128,
+    pub keeper_fee: i128, // Fee paid to anyone who triggers auto_claim
+    pub staked_amount: i128, // Amount currently staked in external contract
+
+    pub owner: Address,
+    pub delegate: Option<Address>,
+    pub title: String, // Short human-readable title (max 32 chars)
+
     pub start_time: u64,
     pub end_time: u64,
-    pub keeper_fee: i128, // Fee paid to anyone who triggers auto_claim
-    pub title: String, // Short human-readable title (max 32 chars)
+    pub creation_time: u64, // Timestamp of creation for clawback grace period
+    pub step_duration: u64, // Duration of each vesting step in seconds (0 = linear)
+
     pub is_initialized: bool, // Lazy initialization flag
     pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
-    pub creation_time: u64, // Timestamp of creation for clawback grace period
     pub is_transferable: bool, // Can the beneficiary transfer this vault?
     pub step_duration: u64, // Duration of each vesting step in seconds (0 = linear)
     pub staked_amount: i128, // Amount currently staked in external contract
