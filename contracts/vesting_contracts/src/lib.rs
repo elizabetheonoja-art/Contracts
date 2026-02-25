@@ -7,6 +7,24 @@ pub enum WhitelistDataKey {
     WhitelistedTokens,
 }
 
+// DataKey for contract storage
+#[contracttype]
+pub enum DataKey {
+    AdminAddress,
+    AdminBalance,
+    InitialSupply,
+    ProposedAdmin,
+    VaultCount,
+    VaultData(u64),
+    UserVaults(Address),
+    VaultMilestones(u64),
+    IsPaused,
+}
+
+// Storage keys for auto-claim functionality
+const VAULT_DATA: DataKey = DataKey::VaultData(0); // Placeholder, will be indexed dynamically
+const KEEPER_FEES: Symbol = Symbol::short(&"keeper_fees");
+
 mod factory;
 pub use factory::{VestingFactory, VestingFactoryClient};
 
@@ -106,6 +124,9 @@ impl VestingContract {
         // Initialize vault count
         env.storage().instance().set(&DataKey::VaultCount, &0u64);
 
+        // Initialize pause state to false (unpaused)
+        env.storage().instance().set(&DataKey::IsPaused, &false);
+
         // Initialize whitelisted tokens map
         let whitelist: Map<Address, bool> = Map::new(&env);
         env.storage().instance().set(&WhitelistDataKey::WhitelistedTokens, &whitelist);
@@ -199,7 +220,45 @@ impl VestingContract {
         env.storage().instance().get(&DataKey::ProposedAdmin)
     }
 
+    // Toggle pause state (Admin only) - "Big Red Button" for emergency pause
+    pub fn toggle_pause(env: Env) {
+        Self::require_admin(&env);
+        
+        let current_pause_state: bool = env.storage()
+            .instance()
+            .get(&DataKey::IsPaused)
+            .unwrap_or(false);
+        
+        let new_pause_state = !current_pause_state;
+        env.storage().instance().set(&DataKey::IsPaused, &new_pause_state);
+        
+        // Emit event for pause state change
+        env.events().publish(
+            Symbol::new(&env, "PauseToggled"),
+            (new_pause_state, env.ledger().timestamp()),
+        );
+    }
+
+    // Get current pause state
+    pub fn is_paused(env: Env) -> bool {
+        env.storage()
+            .instance()
+            .get(&DataKey::IsPaused)
+            .unwrap_or(false)
+    }
+
     // Full initialization - writes all metadata immediately
+    pub fn create_vault_full(
+        env: Env,
+        owner: Address,
+        amount: i128,
+        start_time: u64,
+        end_time: u64,
+        keeper_fee: i128,
+        is_revocable: bool,
+        is_transferable: bool,
+        step_duration: u64,
+    ) -> u64 {
 
         Self::require_admin(&env);
 
@@ -285,6 +344,17 @@ impl VestingContract {
     }
 
     // Lazy initialization - writes minimal data initially
+    pub fn create_vault_lazy(
+        env: Env,
+        owner: Address,
+        amount: i128,
+        start_time: u64,
+        end_time: u64,
+        keeper_fee: i128,
+        is_revocable: bool,
+        is_transferable: bool,
+        step_duration: u64,
+    ) -> u64 {
 
         // Get next vault ID
         let mut vault_count: u64 = env
@@ -359,6 +429,14 @@ impl VestingContract {
     }
 
     // Initialize vault metadata when needed (on-demand)
+    fn initialize_vault_metadata(env: &Env, vault_id: u64) -> bool {
+        let vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
 
         // Only initialize if not already initialized
         if !vault.is_initialized {
@@ -401,18 +479,34 @@ impl VestingContract {
             return vault.total_amount;
         }
         let elapsed = now - vault.start_time;
-        let effective_elapsed = if vault.step_duration > 0 {
-            (elapsed / vault.step_duration) * vault.step_duration
-        } else {
-            elapsed
-        };
         
-        // Use i128 math
-        (vault.total_amount * effective_elapsed as i128) / duration as i128
+        if vault.step_duration > 0 {
+            // Periodic vesting: calculate vested = (elapsed / step_duration) * rate * step_duration
+            // Rate is total_amount / duration, so: vested = (elapsed / step_duration) * (total_amount / duration) * step_duration
+            // This simplifies to: vested = (elapsed / step_duration) * total_amount * step_duration / duration
+            let completed_steps = elapsed / vault.step_duration;
+            let rate_per_second = vault.total_amount / duration as i128;
+            let vested = completed_steps as i128 * rate_per_second * vault.step_duration as i128;
+            
+            // Ensure we don't exceed total amount
+            if vested > vault.total_amount {
+                vault.total_amount
+            } else {
+                vested
+            }
+        } else {
+            // Linear vesting
+            (vault.total_amount * elapsed as i128) / duration as i128
+        }
     }
 
     // Claim tokens from vault
     pub fn claim_tokens(env: Env, vault_id: u64, claim_amount: i128) -> i128 {
+        // Check if contract is paused
+        if Self::is_paused(env.clone()) {
+            panic!("Contract is paused - all withdrawals are disabled");
+        }
+
         let mut vault: Vault = env
             .storage()
             .instance()
@@ -568,6 +662,11 @@ impl VestingContract {
 
     // Claim tokens as delegate (tokens still go to owner)
     pub fn claim_as_delegate(env: Env, vault_id: u64, claim_amount: i128) -> i128 {
+        // Check if contract is paused
+        if Self::is_paused(env.clone()) {
+            panic!("Contract is paused - all withdrawals are disabled");
+        }
+
         let vault: Vault = env
             .storage()
             .instance()
@@ -891,6 +990,13 @@ impl VestingContract {
 
     // Get vault info (initializes if needed)
     pub fn get_vault(env: Env, vault_id: u64) -> Vault {
+        let vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
 
         // Auto-initialize if lazy
         if !vault.is_initialized {
@@ -915,7 +1021,12 @@ impl VestingContract {
 
         // Initialize all lazy vaults for this user
         for vault_id in vault_ids.iter() {
-
+            let vault: Vault = env
+                .storage()
+                .instance()
+                .get(&DataKey::VaultData(vault_id))
+                .unwrap_or_else(|| {
+                    panic!("Vault not found");
                 });
 
             if !vault.is_initialized {
@@ -1378,7 +1489,7 @@ impl VestingContract {
     // Calculate currently claimable tokens based on linear vesting
     pub fn get_claimable_amount(env: Env, vault_id: u64) -> i128 {
         let vault: Vault = env.storage().instance()
-            .get(&VAULT_DATA, &vault_id)
+            .get(&DataKey::VaultData(vault_id))
             .unwrap_or_else(|| panic!("Vault not found"));
 
         let vested = Self::calculate_time_vested_amount(&env, &vault);
@@ -1394,21 +1505,25 @@ impl VestingContract {
     // Tokens go to beneficiary, but keeper can get a tip.
     pub fn auto_claim(env: Env, vault_id: u64, keeper: Address) {
         let mut vault: Vault = env.storage().instance()
-            .get(&VAULT_DATA, &vault_id)
+            .get(&DataKey::VaultData(vault_id))
             .unwrap_or_else(|| panic!("Vault not found"));
 
-        require!(vault.is_initialized, "Vault not initialized");
+        if !vault.is_initialized {
+            panic!("Vault not initialized");
+        }
 
         let claimable = Self::get_claimable_amount(env.clone(), vault_id);
         
         // Ensure there's enough to cover the fee and something left for beneficiary
-        require!(claimable > vault.keeper_fee, "Insufficient claimable tokens to cover fee");
+        if claimable <= vault.keeper_fee {
+            panic!("Insufficient claimable tokens to cover fee");
+        }
 
         let beneficiary_amount = claimable - vault.keeper_fee;
         
         // Update vault
         vault.released_amount += claimable;
-        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+        env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
 
         // Update keeper fees
         let mut fees: Map<Address, i128> = env.storage().instance().get(&KEEPER_FEES).unwrap_or(Map::new(&env));
