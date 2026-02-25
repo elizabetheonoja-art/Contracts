@@ -1,11 +1,30 @@
 #![no_std]
 use soroban_sdk::{contract, contractimpl, contracttype, token, vec, Address, Env, IntoVal, Map, Symbol, Vec};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Map, Symbol, Vec, String};
 
 // DataKey for whitelisted tokens
 #[contracttype]
 pub enum WhitelistDataKey {
     WhitelistedTokens,
 }
+
+// DataKey for contract storage
+#[contracttype]
+pub enum DataKey {
+    AdminAddress,
+    AdminBalance,
+    InitialSupply,
+    ProposedAdmin,
+    VaultCount,
+    VaultData(u64),
+    UserVaults(Address),
+    VaultMilestones(u64),
+    IsPaused,
+}
+
+// Storage keys for auto-claim functionality
+const VAULT_DATA: DataKey = DataKey::VaultData(0); // Placeholder, will be indexed dynamically
+const KEEPER_FEES: Symbol = Symbol::short(&"keeper_fees");
 
 mod factory;
 pub use factory::{VestingFactory, VestingFactoryClient};
@@ -37,6 +56,7 @@ pub struct Vault {
     pub start_time: u64,
     pub end_time: u64,
     pub keeper_fee: i128, // Fee paid to anyone who triggers auto_claim
+        pub title: String, // Short human-readable title (max 32 chars)
     pub is_initialized: bool, // Lazy initialization flag
     pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
     pub creation_time: u64, // Timestamp of creation for clawback grace period
@@ -79,6 +99,7 @@ pub struct VaultCreated {
     pub total_amount: i128,
     pub cliff_duration: u64,
     pub start_time: u64,
+    pub title: String,
 }
 
 #[contractimpl]
@@ -122,6 +143,10 @@ impl VestingContract {
 
         env.storage().instance().set(&DataKey::VaultCount, &0u64);
 
+        // Initialize pause state to false (unpaused)
+        env.storage().instance().set(&DataKey::IsPaused, &false);
+
+        // Initialize whitelisted tokens map
         let whitelist: Map<Address, bool> = Map::new(&env);
         env.storage()
             .instance()
@@ -206,6 +231,33 @@ impl VestingContract {
         env.storage().instance().get(&DataKey::ProposedAdmin)
     }
 
+    // Toggle pause state (Admin only) - "Big Red Button" for emergency pause
+    pub fn toggle_pause(env: Env) {
+        Self::require_admin(&env);
+        
+        let current_pause_state: bool = env.storage()
+            .instance()
+            .get(&DataKey::IsPaused)
+            .unwrap_or(false);
+        
+        let new_pause_state = !current_pause_state;
+        env.storage().instance().set(&DataKey::IsPaused, &new_pause_state);
+        
+        // Emit event for pause state change
+        env.events().publish(
+            Symbol::new(&env, "PauseToggled"),
+            (new_pause_state, env.ledger().timestamp()),
+        );
+    }
+
+    // Get current pause state
+    pub fn is_paused(env: Env) -> bool {
+        env.storage()
+            .instance()
+            .get(&DataKey::IsPaused)
+            .unwrap_or(false)
+    }
+
     // Full initialization - writes all metadata immediately
     pub fn create_vault_full(
         env: Env,
@@ -218,6 +270,7 @@ impl VestingContract {
         is_transferable: bool,
         step_duration: u64,
     ) -> u64 {
+
         Self::require_admin(&env);
 
         let mut vault_count: u64 = env
@@ -250,6 +303,7 @@ impl VestingContract {
             start_time,
             end_time,
             keeper_fee,
+            title: String::from_slice(&env, ""),
             is_initialized: true,
             is_irrevocable: !is_revocable,
             creation_time: now,
@@ -283,6 +337,7 @@ impl VestingContract {
             total_amount: amount,
             cliff_duration,
             start_time,
+            title: String::from_slice(&env, ""),
         };
         env.events().publish(
             (Symbol::new(&env, "VaultCreated"), vault_count),
@@ -336,6 +391,7 @@ impl VestingContract {
             start_time,
             end_time,
             keeper_fee,
+            title: String::from_slice(&env, ""),
             is_initialized: false, // Mark as lazy initialized
             is_irrevocable: !is_revocable,
             creation_time: now,
@@ -360,6 +416,7 @@ impl VestingContract {
             total_amount: amount,
             cliff_duration,
             start_time,
+            title: String::from_slice(&env, ""),
         };
         env.events().publish(
             (Symbol::new(&env, "VaultCreated"), vault_count),
@@ -376,6 +433,9 @@ impl VestingContract {
             .instance()
             .get(&DataKey::VaultData(vault_id))
             .unwrap_or_else(|| panic!("Vault not found"));
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
 
         if !vault.is_initialized {
             let mut updated_vault = vault.clone();
@@ -422,10 +482,34 @@ impl VestingContract {
         };
 
         (vault.total_amount * effective_elapsed as i128) / duration as i128
+        
+        if vault.step_duration > 0 {
+            // Periodic vesting: calculate vested = (elapsed / step_duration) * rate * step_duration
+            // Rate is total_amount / duration, so: vested = (elapsed / step_duration) * (total_amount / duration) * step_duration
+            // This simplifies to: vested = (elapsed / step_duration) * total_amount * step_duration / duration
+            let completed_steps = elapsed / vault.step_duration;
+            let rate_per_second = vault.total_amount / duration as i128;
+            let vested = completed_steps as i128 * rate_per_second * vault.step_duration as i128;
+            
+            // Ensure we don't exceed total amount
+            if vested > vault.total_amount {
+                vault.total_amount
+            } else {
+                vested
+            }
+        } else {
+            // Linear vesting
+            (vault.total_amount * elapsed as i128) / duration as i128
+        }
     }
 
     // Claim tokens from vault
     pub fn claim_tokens(env: Env, vault_id: u64, claim_amount: i128) -> i128 {
+        // Check if contract is paused
+        if Self::is_paused(env.clone()) {
+            panic!("Contract is paused - all withdrawals are disabled");
+        }
+
         let mut vault: Vault = env
             .storage()
             .instance()
@@ -561,6 +645,11 @@ impl VestingContract {
 
     // Claim tokens as delegate (tokens still go to owner)
     pub fn claim_as_delegate(env: Env, vault_id: u64, claim_amount: i128) -> i128 {
+        // Check if contract is paused
+        if Self::is_paused(env.clone()) {
+            panic!("Contract is paused - all withdrawals are disabled");
+        }
+
         let vault: Vault = env
             .storage()
             .instance()
@@ -690,6 +779,25 @@ impl VestingContract {
         );
     }
 
+    // Admin-only: set a short title for a vault (max 32 bytes)
+    pub fn set_vault_title(env: Env, vault_id: u64, title: String) {
+        Self::require_admin(&env);
+
+        // Enforce max length (32 bytes)
+        if title.len() > 32 {
+            panic!("Title too long");
+        }
+
+        let mut vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
+
+        vault.title = title;
+        env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
+    }
+
     // Batch create vaults with lazy initialization
     pub fn batch_create_vaults_lazy(env: Env, batch_data: BatchCreateData) -> Vec<u64> {
         Self::require_admin(&env);
@@ -729,6 +837,9 @@ impl VestingContract {
                 keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
                 is_initialized: false,
                 is_irrevocable: false,
+                title: String::from_slice(&env, ""),
+                is_initialized: false, // Lazy initialization
+                is_irrevocable: false, // Default to revocable for batch operations
                 creation_time: now,
                 is_transferable: false,
                 step_duration: batch_data.step_durations.get(i).unwrap_or(0),
@@ -748,6 +859,7 @@ impl VestingContract {
                 total_amount: vault.total_amount,
                 cliff_duration,
                 start_time,
+                title: String::from_slice(&env, ""),
             };
             env.events()
                 .publish((Symbol::new(&env, "VaultCreated"), vault_id), vault_created);
@@ -798,6 +910,7 @@ impl VestingContract {
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
+                title: String::from_slice(&env, ""),
                 is_initialized: true,
                 is_irrevocable: false,
                 creation_time: now,
@@ -830,6 +943,7 @@ impl VestingContract {
                 total_amount: vault.total_amount,
                 cliff_duration,
                 start_time,
+                title: String::from_slice(&env, ""),
             };
             env.events()
                 .publish((Symbol::new(&env, "VaultCreated"), vault_id), vault_created);
@@ -850,6 +964,9 @@ impl VestingContract {
             .instance()
             .get(&DataKey::VaultData(vault_id))
             .unwrap_or_else(|| panic!("Vault not found"));
+            .unwrap_or_else(|| {
+                panic!("Vault not found");
+            });
 
         if !vault.is_initialized {
             Self::initialize_vault_metadata(&env, vault_id);
@@ -876,6 +993,9 @@ impl VestingContract {
                 .instance()
                 .get(&DataKey::VaultData(vault_id))
                 .unwrap_or_else(|| panic!("Vault not found"));
+                .unwrap_or_else(|| {
+                    panic!("Vault not found");
+                });
 
             if !vault.is_initialized {
                 Self::initialize_vault_metadata(&env, vault_id);
@@ -886,9 +1006,9 @@ impl VestingContract {
     }
 
     // Revoke tokens from a vault and return them to admin
-    pub fn revoke_tokens(env: Env, vault_id: u64) -> i128 {
-        Self::require_admin(&env);
-
+    // Internal helper: revoke full unreleased amount from a vault and emit event.
+    // Does NOT update admin balance — caller is responsible for a single aggregated transfer.
+    fn internal_revoke_full(env: &Env, vault_id: u64) -> i128 {
         let mut vault: Vault = env
             .storage()
             .instance()
@@ -905,16 +1025,30 @@ impl VestingContract {
         }
 
         vault.released_amount = vault.total_amount;
-        env.storage()
-            .instance()
-            .set(&DataKey::VaultData(vault_id), &vault);
+        env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
 
+        let timestamp = env.ledger().timestamp();
+        env.events().publish(
+            (Symbol::new(env, "TokensRevoked"), vault_id),
+            (unreleased_amount, timestamp),
+        );
+
+        unreleased_amount
+    }
+
+    // Admin-only: Revoke tokens from a vault and return them to admin
+    pub fn revoke_tokens(env: Env, vault_id: u64) -> i128 {
+        Self::require_admin(&env);
+
+        let returned = Self::internal_revoke_full(&env, vault_id);
+
+        // Single admin balance update for this call
         let mut admin_balance: i128 = env
             .storage()
             .instance()
             .get(&DataKey::AdminBalance)
             .unwrap_or(0);
-        admin_balance += unreleased_amount;
+        admin_balance += returned;
         env.storage()
             .instance()
             .set(&DataKey::AdminBalance, &admin_balance);
@@ -926,12 +1060,32 @@ impl VestingContract {
         );
 
         unreleased_amount
+        returned
     }
 
     // Revoke a specific amount of tokens from a vault and return them to admin
     pub fn revoke_partial(env: Env, vault_id: u64, amount: i128) -> i128 {
         Self::require_admin(&env);
 
+        let returned = Self::internal_revoke_partial(&env, vault_id, amount);
+
+        // Single admin balance update for this call
+        let mut admin_balance: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::AdminBalance)
+            .unwrap_or(0);
+        admin_balance += returned;
+        env.storage()
+            .instance()
+            .set(&DataKey::AdminBalance, &admin_balance);
+
+        returned
+    }
+
+    // Internal helper: revoke a specific amount from a vault and emit event.
+    // Does NOT update admin balance — caller is responsible for a single aggregated transfer.
+    fn internal_revoke_partial(env: &Env, vault_id: u64, amount: i128) -> i128 {
         let mut vault: Vault = env
             .storage()
             .instance()
@@ -951,16 +1105,34 @@ impl VestingContract {
         }
 
         vault.released_amount += amount;
-        env.storage()
-            .instance()
-            .set(&DataKey::VaultData(vault_id), &vault);
+        env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
 
+        let timestamp = env.ledger().timestamp();
+        env.events().publish(
+            (Symbol::new(env, "TokensRevoked"), vault_id),
+            (amount, timestamp),
+        );
+
+        amount
+    }
+
+    // Admin-only: Revoke many vaults in a single call and credit the admin once.
+    pub fn batch_revoke(env: Env, vault_ids: Vec<u64>) -> i128 {
+        Self::require_admin(&env);
+
+        let mut total_returned: i128 = 0;
+        for id in vault_ids.iter() {
+            let returned = Self::internal_revoke_full(&env, id);
+            total_returned += returned;
+        }
+
+        // Single admin balance update for the whole batch
         let mut admin_balance: i128 = env
             .storage()
             .instance()
             .get(&DataKey::AdminBalance)
             .unwrap_or(0);
-        admin_balance += amount;
+        admin_balance += total_returned;
         env.storage()
             .instance()
             .set(&DataKey::AdminBalance, &admin_balance);
@@ -972,6 +1144,7 @@ impl VestingContract {
         );
 
         amount
+        total_returned
     }
 
     // Clawback a vault within the grace period (1 hour)
@@ -1275,6 +1448,7 @@ impl VestingContract {
         let vault: Vault = env
             .storage()
             .instance()
+        let vault: Vault = env.storage().instance()
             .get(&DataKey::VaultData(vault_id))
             .unwrap_or_else(|| panic!("Vault not found"));
 
@@ -1293,6 +1467,7 @@ impl VestingContract {
         let mut vault: Vault = env
             .storage()
             .instance()
+        let mut vault: Vault = env.storage().instance()
             .get(&DataKey::VaultData(vault_id))
             .unwrap_or_else(|| panic!("Vault not found"));
 
@@ -1302,6 +1477,8 @@ impl VestingContract {
 
         let claimable = Self::get_claimable_amount(env.clone(), vault_id);
 
+        
+        // Ensure there's enough to cover the fee and something left for beneficiary
         if claimable <= vault.keeper_fee {
             panic!("Insufficient claimable tokens to cover fee");
         }
@@ -1313,6 +1490,7 @@ impl VestingContract {
         env.storage()
             .instance()
             .set(&DataKey::VaultData(vault_id), &vault);
+        env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
 
         let mut fees: Map<Address, i128> = env
             .storage()
