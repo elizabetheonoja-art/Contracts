@@ -898,75 +898,89 @@ impl VestingContract {
     }
 
     // Revoke tokens from a vault and return them to admin
-    pub fn revoke_tokens(env: Env, vault_id: u64) -> i128 {
-        Self::require_admin(&env);
-
+    // Internal helper: revoke full unreleased amount from a vault and emit event.
+    // Does NOT update admin balance — caller is responsible for a single aggregated transfer.
+    fn internal_revoke_full(env: &Env, vault_id: u64) -> i128 {
         let mut vault: Vault = env
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
+            .unwrap_or_else(|| panic!("Vault not found"));
 
-        // Security check: Cannot revoke from irrevocable vaults
         if vault.is_irrevocable {
             panic!("Vault is irrevocable");
         }
 
-        // Calculate amount to return (unreleased tokens)
         let unreleased_amount = vault.total_amount - vault.released_amount;
         if unreleased_amount <= 0 {
             panic!("No tokens available to revoke");
         }
 
-        // Update vault to mark all tokens as released (effectively revoking them)
         vault.released_amount = vault.total_amount;
-        env.storage()
-            .instance()
-            .set(&DataKey::VaultData(vault_id), &vault);
+        env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
 
-        // Return tokens to admin balance
-        let mut admin_balance: i128 = env
-            .storage()
-            .instance()
-            .get(&DataKey::AdminBalance)
-            .unwrap_or(0);
-        admin_balance += unreleased_amount;
-        env.storage()
-            .instance()
-            .set(&DataKey::AdminBalance, &admin_balance);
-
-        // Get current timestamp
         let timestamp = env.ledger().timestamp();
-
-        // Emit TokensRevoked event
         env.events().publish(
-            (Symbol::new(&env, "TokensRevoked"), vault_id),
+            (Symbol::new(env, "TokensRevoked"), vault_id),
             (unreleased_amount, timestamp),
         );
 
         unreleased_amount
     }
 
+    // Admin-only: Revoke tokens from a vault and return them to admin
+    pub fn revoke_tokens(env: Env, vault_id: u64) -> i128 {
+        Self::require_admin(&env);
+
+        let returned = Self::internal_revoke_full(&env, vault_id);
+
+        // Single admin balance update for this call
+        let mut admin_balance: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::AdminBalance)
+            .unwrap_or(0);
+        admin_balance += returned;
+        env.storage()
+            .instance()
+            .set(&DataKey::AdminBalance, &admin_balance);
+
+        returned
+    }
+
     // Revoke a specific amount of tokens from a vault and return them to admin
     pub fn revoke_partial(env: Env, vault_id: u64, amount: i128) -> i128 {
         Self::require_admin(&env);
 
+        let returned = Self::internal_revoke_partial(&env, vault_id, amount);
+
+        // Single admin balance update for this call
+        let mut admin_balance: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::AdminBalance)
+            .unwrap_or(0);
+        admin_balance += returned;
+        env.storage()
+            .instance()
+            .set(&DataKey::AdminBalance, &admin_balance);
+
+        returned
+    }
+
+    // Internal helper: revoke a specific amount from a vault and emit event.
+    // Does NOT update admin balance — caller is responsible for a single aggregated transfer.
+    fn internal_revoke_partial(env: &Env, vault_id: u64, amount: i128) -> i128 {
         let mut vault: Vault = env
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
+            .unwrap_or_else(|| panic!("Vault not found"));
 
-        // Security check: Cannot revoke from irrevocable vaults
         if vault.is_irrevocable {
             panic!("Vault is irrevocable");
         }
 
-        // Calculate unvested balance (tokens not yet released)
         let unvested_balance = vault.total_amount - vault.released_amount;
         if amount <= 0 {
             panic!("Amount to revoke must be positive");
@@ -975,33 +989,40 @@ impl VestingContract {
             panic!("Amount exceeds unvested balance");
         }
 
-        // Update vault to increase released amount by the specified amount
         vault.released_amount += amount;
-        env.storage()
-            .instance()
-            .set(&DataKey::VaultData(vault_id), &vault);
+        env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
 
-        // Return tokens to admin balance
+        let timestamp = env.ledger().timestamp();
+        env.events().publish(
+            (Symbol::new(env, "TokensRevoked"), vault_id),
+            (amount, timestamp),
+        );
+
+        amount
+    }
+
+    // Admin-only: Revoke many vaults in a single call and credit the admin once.
+    pub fn batch_revoke(env: Env, vault_ids: Vec<u64>) -> i128 {
+        Self::require_admin(&env);
+
+        let mut total_returned: i128 = 0;
+        for id in vault_ids.iter() {
+            let returned = Self::internal_revoke_full(&env, id);
+            total_returned += returned;
+        }
+
+        // Single admin balance update for the whole batch
         let mut admin_balance: i128 = env
             .storage()
             .instance()
             .get(&DataKey::AdminBalance)
             .unwrap_or(0);
-        admin_balance += amount;
+        admin_balance += total_returned;
         env.storage()
             .instance()
             .set(&DataKey::AdminBalance, &admin_balance);
 
-        // Get current timestamp
-        let timestamp = env.ledger().timestamp();
-
-        // Emit TokensRevoked event
-        env.events().publish(
-            (Symbol::new(&env, "TokensRevoked"), vault_id),
-            (amount, timestamp),
-        );
-
-        amount
+        total_returned
     }
 
     // Clawback a vault within the grace period (1 hour)
