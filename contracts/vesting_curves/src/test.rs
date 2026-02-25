@@ -256,3 +256,96 @@ fn i6_double_claim_only_yields_incremental_amount() {
     let bal = TokenClient::new(&s.env, &s.token).balance(&s.beneficiary);
     assert_eq!(bal, TOTAL);
 }
+
+// ── Zero-duration / zero-amount edge cases (Issue #41) ──────────────────────
+
+#[test]
+#[should_panic(expected = "duration must be positive")]
+fn z1_zero_duration_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin       = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token    = token_id.address();
+    StellarAssetClient::new(&env, &token).mint(&admin, &TOTAL);
+
+    let vault_id = env.register(crate::VestingVault, ());
+    let vault    = VestingVaultClient::new(&env, &vault_id);
+    TokenClient::new(&env, &token).transfer(&admin, &vault_id, &TOTAL);
+
+    env.ledger().with_mut(|l| l.timestamp = START);
+
+    vault.initialize(
+        &admin,
+        &beneficiary,
+        &token,
+        &TOTAL,
+        &START,
+        &0u64,
+        &VestingCurve::Linear,
+    );
+}
+
+#[test]
+#[should_panic(expected = "total_amount must be positive")]
+fn z2_zero_amount_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin       = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token    = token_id.address();
+
+    let vault_id = env.register(crate::VestingVault, ());
+    let vault    = VestingVaultClient::new(&env, &vault_id);
+
+    env.ledger().with_mut(|l| l.timestamp = START);
+
+    vault.initialize(
+        &admin,
+        &beneficiary,
+        &token,
+        &0i128,
+        &START,
+        &DURATION,
+        &VestingCurve::Linear,
+    );
+}
+
+#[test]
+#[should_panic(expected = "duration must be positive")]
+fn z3_zero_duration_exponential_panics() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin       = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token    = token_id.address();
+    StellarAssetClient::new(&env, &token).mint(&admin, &TOTAL);
+
+    let vault_id = env.register(crate::VestingVault, ());
+    let vault    = VestingVaultClient::new(&env, &vault_id);
+    TokenClient::new(&env, &token).transfer(&admin, &vault_id, &TOTAL);
+
+    env.ledger().with_mut(|l| l.timestamp = START);
+
+    vault.initialize(
+        &admin,
+        &beneficiary,
+        &token,
+        &TOTAL,
+        &START,
+        &0u64,
+        &VestingCurve::Exponential,
+    );
+}
