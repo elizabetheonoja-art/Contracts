@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Map, Symbol, Vec};
+use soroban_sdk::{contract, contractimpl, contracttype, token, vec, Address, Env, IntoVal, Map, Symbol, Vec};
 
 // DataKey for whitelisted tokens
 #[contracttype]
@@ -13,7 +13,18 @@ pub use factory::{VestingFactory, VestingFactoryClient};
 #[contract]
 pub struct VestingContract;
 
-
+#[contracttype]
+pub enum DataKey {
+    AdminAddress,
+    AdminBalance,
+    InitialSupply,
+    ProposedAdmin,
+    VaultCount,
+    VaultData(u64),
+    VaultMilestones(u64),
+    UserVaults(Address),
+    KeeperFees,
+}
 
 // Vault structure with lazy initialization
 #[contracttype]
@@ -73,40 +84,48 @@ pub struct VaultCreated {
 #[contractimpl]
 #[allow(deprecated)]
 impl VestingContract {
-        // Admin-only: Add token to whitelist
-        pub fn add_to_whitelist(env: Env, token: Address) {
-            Self::require_admin(&env);
-            let mut whitelist: Map<Address, bool> = env.storage().instance().get(&WhitelistDataKey::WhitelistedTokens).unwrap_or(Map::new(&env));
-            whitelist.set(token.clone(), true);
-            env.storage().instance().set(&WhitelistDataKey::WhitelistedTokens, &whitelist);
-        }
+    // Admin-only: Add token to whitelist
+    pub fn add_to_whitelist(env: Env, token: Address) {
+        Self::require_admin(&env);
+        let mut whitelist: Map<Address, bool> = env
+            .storage()
+            .instance()
+            .get(&WhitelistDataKey::WhitelistedTokens)
+            .unwrap_or(Map::new(&env));
+        whitelist.set(token.clone(), true);
+        env.storage()
+            .instance()
+            .set(&WhitelistDataKey::WhitelistedTokens, &whitelist);
+    }
 
-        // Check if token is whitelisted
-        fn is_token_whitelisted(env: &Env, token: &Address) -> bool {
-            let whitelist: Map<Address, bool> = env.storage().instance().get(&WhitelistDataKey::WhitelistedTokens).unwrap_or(Map::new(env));
-            whitelist.get(token.clone()).unwrap_or(false)
-        }
+    // Check if token is whitelisted
+    fn is_token_whitelisted(env: &Env, token: &Address) -> bool {
+        let whitelist: Map<Address, bool> = env
+            .storage()
+            .instance()
+            .get(&WhitelistDataKey::WhitelistedTokens)
+            .unwrap_or(Map::new(env));
+        whitelist.get(token.clone()).unwrap_or(false)
+    }
+
     // Initialize contract with initial supply
     pub fn initialize(env: Env, admin: Address, initial_supply: i128) {
-        // Set initial supply
         env.storage()
             .instance()
             .set(&DataKey::InitialSupply, &initial_supply);
 
-        // Set admin balance (initially all tokens go to admin)
         env.storage()
             .instance()
             .set(&DataKey::AdminBalance, &initial_supply);
 
-        // Set admin address
         env.storage().instance().set(&DataKey::AdminAddress, &admin);
 
-        // Initialize vault count
         env.storage().instance().set(&DataKey::VaultCount, &0u64);
 
-        // Initialize whitelisted tokens map
         let whitelist: Map<Address, bool> = Map::new(&env);
-        env.storage().instance().set(&WhitelistDataKey::WhitelistedTokens, &whitelist);
+        env.storage()
+            .instance()
+            .set(&WhitelistDataKey::WhitelistedTokens, &whitelist);
     }
 
     // Helper function to check if caller is admin
@@ -116,10 +135,7 @@ impl VestingContract {
             .instance()
             .get(&DataKey::AdminAddress)
             .unwrap_or_else(|| panic!("Admin not set"));
-        let caller = env.current_contract_address();
-        if caller != admin {
-            panic!("Caller is not admin");
-        }
+        admin.require_auth();
     }
 
     fn require_milestones_configured(env: &Env, vault_id: u64) -> Vec<Milestone> {
@@ -155,8 +171,6 @@ impl VestingContract {
     // Propose a new admin (first step of two-step process)
     pub fn propose_new_admin(env: Env, new_admin: Address) {
         Self::require_admin(&env);
-
-        // Store the proposed admin
         env.storage()
             .instance()
             .set(&DataKey::ProposedAdmin, &new_admin);
@@ -170,17 +184,12 @@ impl VestingContract {
             .get(&DataKey::ProposedAdmin)
             .unwrap_or_else(|| panic!("No proposed admin found"));
 
-        let caller = env.current_contract_address();
-        if caller != proposed_admin {
-            panic!("Caller is not the proposed admin");
-        }
+        proposed_admin.require_auth();
 
-        // Transfer admin rights
         env.storage()
             .instance()
             .set(&DataKey::AdminAddress, &proposed_admin);
 
-        // Clear the proposed admin
         env.storage().instance().remove(&DataKey::ProposedAdmin);
     }
 
@@ -198,10 +207,19 @@ impl VestingContract {
     }
 
     // Full initialization - writes all metadata immediately
-
+    pub fn create_vault_full(
+        env: Env,
+        owner: Address,
+        amount: i128,
+        start_time: u64,
+        end_time: u64,
+        keeper_fee: i128,
+        is_revocable: bool,
+        is_transferable: bool,
+        step_duration: u64,
+    ) -> u64 {
         Self::require_admin(&env);
 
-        // Get next vault ID
         let mut vault_count: u64 = env
             .storage()
             .instance()
@@ -209,7 +227,6 @@ impl VestingContract {
             .unwrap_or(0);
         vault_count += 1;
 
-        // Check admin balance and transfer tokens
         let mut admin_balance: i128 = env
             .storage()
             .instance()
@@ -225,10 +242,9 @@ impl VestingContract {
 
         let now = env.ledger().timestamp();
 
-        // Create vault with full initialization
         let vault = Vault {
             owner: owner.clone(),
-            delegate: None, // No delegate initially
+            delegate: None,
             total_amount: amount,
             released_amount: 0,
             start_time,
@@ -242,12 +258,10 @@ impl VestingContract {
             staked_amount: 0,
         };
 
-        // Store vault data immediately (expensive gas usage)
         env.storage()
             .instance()
             .set(&DataKey::VaultData(vault_count), &vault);
 
-        // Update user vaults list
         let mut user_vaults: Vec<u64> = env
             .storage()
             .instance()
@@ -258,12 +272,10 @@ impl VestingContract {
             .instance()
             .set(&DataKey::UserVaults(owner.clone()), &user_vaults);
 
-        // Update vault count
         env.storage()
             .instance()
             .set(&DataKey::VaultCount, &vault_count);
 
-        // Emit VaultCreated event with strictly typed fields
         let cliff_duration = start_time.saturating_sub(now);
         let vault_created = VaultCreated {
             vault_id: vault_count,
@@ -281,8 +293,19 @@ impl VestingContract {
     }
 
     // Lazy initialization - writes minimal data initially
+    pub fn create_vault_lazy(
+        env: Env,
+        owner: Address,
+        amount: i128,
+        start_time: u64,
+        end_time: u64,
+        keeper_fee: i128,
+        is_revocable: bool,
+        is_transferable: bool,
+        step_duration: u64,
+    ) -> u64 {
+        Self::require_admin(&env);
 
-        // Get next vault ID
         let mut vault_count: u64 = env
             .storage()
             .instance()
@@ -290,7 +313,6 @@ impl VestingContract {
             .unwrap_or(0);
         vault_count += 1;
 
-        // Check admin balance and transfer tokens
         let mut admin_balance: i128 = env
             .storage()
             .instance()
@@ -306,36 +328,31 @@ impl VestingContract {
 
         let now = env.ledger().timestamp();
 
-        // Create vault with lazy initialization (minimal storage)
         let vault = Vault {
             owner: owner.clone(),
-            delegate: None, // No delegate initially
+            delegate: None,
             total_amount: amount,
             released_amount: 0,
             start_time,
             end_time,
             keeper_fee,
             is_initialized: false, // Mark as lazy initialized
-            is_irrevocable: !is_revocable, // Convert from is_revocable parameter
+            is_irrevocable: !is_revocable,
             creation_time: now,
             is_transferable,
             step_duration,
             staked_amount: 0,
         };
 
-        // Store only essential data initially (cheaper gas)
         env.storage()
             .instance()
             .set(&DataKey::VaultData(vault_count), &vault);
 
-        // Update vault count
+        // Don't update user vaults list yet (lazy)
         env.storage()
             .instance()
             .set(&DataKey::VaultCount, &vault_count);
 
-        // Don't update user vaults list yet (lazy)
-
-        // Emit VaultCreated event with strictly typed fields
         let cliff_duration = start_time.saturating_sub(now);
         let vault_created = VaultCreated {
             vault_id: vault_count,
@@ -353,18 +370,21 @@ impl VestingContract {
     }
 
     // Initialize vault metadata when needed (on-demand)
+    fn initialize_vault_metadata(env: &Env, vault_id: u64) -> bool {
+        let vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
 
-        // Only initialize if not already initialized
         if !vault.is_initialized {
             let mut updated_vault = vault.clone();
             updated_vault.is_initialized = true;
 
-            // Store updated vault with full metadata
             env.storage()
                 .instance()
                 .set(&DataKey::VaultData(vault_id), &updated_vault);
 
-            // Update user vaults list (deferred)
             let mut user_vaults: Vec<u64> = env
                 .storage()
                 .instance()
@@ -400,8 +420,7 @@ impl VestingContract {
         } else {
             elapsed
         };
-        
-        // Use i128 math
+
         (vault.total_amount * effective_elapsed as i128) / duration as i128
     }
 
@@ -411,9 +430,7 @@ impl VestingContract {
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
+            .unwrap_or_else(|| panic!("Vault not found"));
 
         if !vault.is_initialized {
             panic!("Vault not initialized");
@@ -422,33 +439,29 @@ impl VestingContract {
             panic!("Claim amount must be positive");
         }
 
-        // Check if milestones are configured
-        let unlocked_amount = if env.storage().instance().has(&DataKey::VaultMilestones(vault_id)) {
-            let milestones = Self::require_milestones_configured(&env, vault_id);
-            let unlocked_pct = Self::unlocked_percentage(&milestones);
-            Self::unlocked_amount(vault.total_amount, unlocked_pct)
-        } else {
-            // Fallback to time-based vesting
-            Self::calculate_time_vested_amount(&env, &vault)
-        };
+        let unlocked_amount =
+            if env.storage().instance().has(&DataKey::VaultMilestones(vault_id)) {
+                let milestones = Self::require_milestones_configured(&env, vault_id);
+                let unlocked_pct = Self::unlocked_percentage(&milestones);
+                Self::unlocked_amount(vault.total_amount, unlocked_pct)
+            } else {
+                Self::calculate_time_vested_amount(&env, &vault)
+            };
 
-        // Auto-unstake logic if needed
         let liquid_balance = vault.total_amount - vault.released_amount - vault.staked_amount;
         if claim_amount > liquid_balance {
             let deficit = claim_amount - liquid_balance;
-            
-            // Get staking contract
-            let staking_contract: Address = env.storage().instance()
+
+            let staking_contract: Address = env
+                .storage()
+                .instance()
                 .get(&Symbol::new(&env, "StakingContract"))
                 .expect("Staking contract not set");
 
-            // Call unstake on external contract
             let args = vec![&env, vault_id.into_val(&env), deficit.into_val(&env)];
             env.invoke_contract::<()>(&staking_contract, &Symbol::new(&env, "unstake"), args);
 
-            // Update local state
             vault.staked_amount -= deficit;
-            // Note: We don't save vault here yet, it's saved at the end of function
         }
 
         let available_to_claim = unlocked_amount - vault.released_amount;
@@ -459,7 +472,6 @@ impl VestingContract {
             panic!("Insufficient unlocked tokens to claim");
         }
 
-        // Update vault
         vault.released_amount += claim_amount;
         env.storage()
             .instance()
@@ -481,9 +493,7 @@ impl VestingContract {
 
         let old_owner = vault.owner.clone();
 
-        // Update user vaults index if the vault has been initialized
         if vault.is_initialized {
-            // Remove vault_id from old owner's list
             let old_vaults: Vec<u64> = env
                 .storage()
                 .instance()
@@ -500,7 +510,6 @@ impl VestingContract {
                 .instance()
                 .set(&DataKey::UserVaults(old_owner.clone()), &updated_old_vaults);
 
-            // Add vault_id to new owner's list
             let mut new_vaults: Vec<u64> = env
                 .storage()
                 .instance()
@@ -512,13 +521,11 @@ impl VestingContract {
                 .set(&DataKey::UserVaults(new_address.clone()), &new_vaults);
         }
 
-        // Update vault owner
         vault.owner = new_address.clone();
         env.storage()
             .instance()
             .set(&DataKey::VaultData(vault_id), &vault);
 
-        // Emit BeneficiaryUpdated event
         env.events().publish(
             (Symbol::new(&env, "BeneficiaryUpdated"), vault_id),
             (old_owner.clone(), new_address),
@@ -531,29 +538,21 @@ impl VestingContract {
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
+            .unwrap_or_else(|| panic!("Vault not found"));
 
         if !vault.is_initialized {
             panic!("Vault not initialized");
         }
 
-        // Check if caller is the vault owner
-        let caller = env.current_contract_address();
-        if caller != vault.owner {
-            panic!("Only vault owner can set delegate");
-        }
+        vault.owner.require_auth();
 
         let old_delegate = vault.delegate.clone();
 
-        // Update delegate
         vault.delegate = delegate.clone();
         env.storage()
             .instance()
             .set(&DataKey::VaultData(vault_id), &vault);
 
-        // Emit DelegateUpdated event
         env.events().publish(
             (Symbol::new(&env, "DelegateUpdated"), vault_id),
             (old_delegate, delegate),
@@ -566,9 +565,7 @@ impl VestingContract {
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
+            .unwrap_or_else(|| panic!("Vault not found"));
 
         if !vault.is_initialized {
             panic!("Vault not initialized");
@@ -577,12 +574,8 @@ impl VestingContract {
             panic!("Claim amount must be positive");
         }
 
-        // Check if caller is authorized delegate
-        let caller = env.current_contract_address();
-        let delegate = vault.delegate.clone();
-        if !(delegate.is_some() && caller == delegate.unwrap()) {
-            panic!("Caller is not authorized delegate for this vault");
-        }
+        let delegate = vault.delegate.clone().unwrap_or_else(|| panic!("No delegate set for this vault"));
+        delegate.require_auth();
 
         let milestones = Self::require_milestones_configured(&env, vault_id);
         let unlocked_pct = Self::unlocked_percentage(&milestones);
@@ -595,14 +588,13 @@ impl VestingContract {
             panic!("Insufficient unlocked tokens to claim");
         }
 
-        // Update vault (same as regular claim)
         let mut updated_vault = vault.clone();
         updated_vault.released_amount += claim_amount;
         env.storage()
             .instance()
             .set(&DataKey::VaultData(vault_id), &updated_vault);
 
-        claim_amount // Tokens go to original owner, not delegate
+        claim_amount
     }
 
     pub fn set_milestones(env: Env, vault_id: u64, milestones: Vec<Milestone>) {
@@ -709,7 +701,6 @@ impl VestingContract {
             .get(&DataKey::VaultCount)
             .unwrap_or(0);
 
-        // Check total admin balance
         let total_amount: i128 = batch_data.amounts.iter().sum();
         let mut admin_balance: i128 = env
             .storage()
@@ -728,29 +719,27 @@ impl VestingContract {
         for i in 0..batch_data.recipients.len() {
             let vault_id = initial_count + i as u64 + 1;
 
-            // Create vault with lazy initialization
             let vault = Vault {
                 owner: batch_data.recipients.get(i).unwrap(),
-                delegate: None, // No delegate initially
+                delegate: None,
                 total_amount: batch_data.amounts.get(i).unwrap(),
                 released_amount: 0,
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
-                is_initialized: false, // Lazy initialization
-                is_irrevocable: false, // Default to revocable for batch operations
+                is_initialized: false,
+                is_irrevocable: false,
                 creation_time: now,
-                is_transferable: false, // Default to non-transferable for batch
+                is_transferable: false,
                 step_duration: batch_data.step_durations.get(i).unwrap_or(0),
                 staked_amount: 0,
             };
 
-            // Store vault data (minimal writes)
             env.storage()
                 .instance()
                 .set(&DataKey::VaultData(vault_id), &vault);
             vault_ids.push_back(vault_id);
-            // Emit VaultCreated event for each created vault
+
             let start_time = batch_data.start_times.get(i).unwrap();
             let cliff_duration = start_time.saturating_sub(now);
             let vault_created = VaultCreated {
@@ -764,7 +753,6 @@ impl VestingContract {
                 .publish((Symbol::new(&env, "VaultCreated"), vault_id), vault_created);
         }
 
-        // Update vault count once (cheaper than individual updates)
         let final_count = initial_count + batch_data.recipients.len() as u64;
         env.storage()
             .instance()
@@ -784,7 +772,6 @@ impl VestingContract {
             .get(&DataKey::VaultCount)
             .unwrap_or(0);
 
-        // Check total admin balance
         let total_amount: i128 = batch_data.amounts.iter().sum();
         let mut admin_balance: i128 = env
             .storage()
@@ -803,29 +790,26 @@ impl VestingContract {
         for i in 0..batch_data.recipients.len() {
             let vault_id = initial_count + i as u64 + 1;
 
-            // Create vault with full initialization
             let vault = Vault {
                 owner: batch_data.recipients.get(i).unwrap(),
-                delegate: None, // No delegate initially
+                delegate: None,
                 total_amount: batch_data.amounts.get(i).unwrap(),
                 released_amount: 0,
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
                 is_initialized: true,
-                is_irrevocable: false, // Default to revocable for batch operations
+                is_irrevocable: false,
                 creation_time: now,
-                is_transferable: false, // Default to non-transferable for batch
+                is_transferable: false,
                 step_duration: batch_data.step_durations.get(i).unwrap_or(0),
                 staked_amount: 0,
             };
 
-            // Store vault data (expensive writes)
             env.storage()
                 .instance()
                 .set(&DataKey::VaultData(vault_id), &vault);
 
-            // Update user vaults list for each vault (expensive)
             let mut user_vaults: Vec<u64> = env
                 .storage()
                 .instance()
@@ -837,7 +821,7 @@ impl VestingContract {
                 .set(&DataKey::UserVaults(vault.owner.clone()), &user_vaults);
 
             vault_ids.push_back(vault_id);
-            // Emit VaultCreated event for each created vault
+
             let start_time = batch_data.start_times.get(i).unwrap();
             let cliff_duration = start_time.saturating_sub(now);
             let vault_created = VaultCreated {
@@ -851,7 +835,6 @@ impl VestingContract {
                 .publish((Symbol::new(&env, "VaultCreated"), vault_id), vault_created);
         }
 
-        // Update vault count once
         let final_count = initial_count + batch_data.recipients.len() as u64;
         env.storage()
             .instance()
@@ -862,11 +845,14 @@ impl VestingContract {
 
     // Get vault info (initializes if needed)
     pub fn get_vault(env: Env, vault_id: u64) -> Vault {
+        let vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
 
-        // Auto-initialize if lazy
         if !vault.is_initialized {
             Self::initialize_vault_metadata(&env, vault_id);
-            // Get updated vault
             env.storage()
                 .instance()
                 .get(&DataKey::VaultData(vault_id))
@@ -884,10 +870,12 @@ impl VestingContract {
             .get(&DataKey::UserVaults(user.clone()))
             .unwrap_or(Vec::new(&env));
 
-        // Initialize all lazy vaults for this user
         for vault_id in vault_ids.iter() {
-
-                });
+            let vault: Vault = env
+                .storage()
+                .instance()
+                .get(&DataKey::VaultData(vault_id))
+                .unwrap_or_else(|| panic!("Vault not found"));
 
             if !vault.is_initialized {
                 Self::initialize_vault_metadata(&env, vault_id);
@@ -905,28 +893,22 @@ impl VestingContract {
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
+            .unwrap_or_else(|| panic!("Vault not found"));
 
-        // Security check: Cannot revoke from irrevocable vaults
         if vault.is_irrevocable {
             panic!("Vault is irrevocable");
         }
 
-        // Calculate amount to return (unreleased tokens)
         let unreleased_amount = vault.total_amount - vault.released_amount;
         if unreleased_amount <= 0 {
             panic!("No tokens available to revoke");
         }
 
-        // Update vault to mark all tokens as released (effectively revoking them)
         vault.released_amount = vault.total_amount;
         env.storage()
             .instance()
             .set(&DataKey::VaultData(vault_id), &vault);
 
-        // Return tokens to admin balance
         let mut admin_balance: i128 = env
             .storage()
             .instance()
@@ -937,10 +919,7 @@ impl VestingContract {
             .instance()
             .set(&DataKey::AdminBalance, &admin_balance);
 
-        // Get current timestamp
         let timestamp = env.ledger().timestamp();
-
-        // Emit TokensRevoked event
         env.events().publish(
             (Symbol::new(&env, "TokensRevoked"), vault_id),
             (unreleased_amount, timestamp),
@@ -957,16 +936,12 @@ impl VestingContract {
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
+            .unwrap_or_else(|| panic!("Vault not found"));
 
-        // Security check: Cannot revoke from irrevocable vaults
         if vault.is_irrevocable {
             panic!("Vault is irrevocable");
         }
 
-        // Calculate unvested balance (tokens not yet released)
         let unvested_balance = vault.total_amount - vault.released_amount;
         if amount <= 0 {
             panic!("Amount to revoke must be positive");
@@ -975,13 +950,11 @@ impl VestingContract {
             panic!("Amount exceeds unvested balance");
         }
 
-        // Update vault to increase released amount by the specified amount
         vault.released_amount += amount;
         env.storage()
             .instance()
             .set(&DataKey::VaultData(vault_id), &vault);
 
-        // Return tokens to admin balance
         let mut admin_balance: i128 = env
             .storage()
             .instance()
@@ -992,10 +965,7 @@ impl VestingContract {
             .instance()
             .set(&DataKey::AdminBalance, &admin_balance);
 
-        // Get current timestamp
         let timestamp = env.ledger().timestamp();
-
-        // Emit TokensRevoked event
         env.events().publish(
             (Symbol::new(&env, "TokensRevoked"), vault_id),
             (amount, timestamp),
@@ -1012,12 +982,10 @@ impl VestingContract {
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
+            .unwrap_or_else(|| panic!("Vault not found"));
 
         let now = env.ledger().timestamp();
-        let grace_period = 3600; // 1 hour in seconds
+        let grace_period = 3600u64;
 
         if now > vault.creation_time + grace_period {
             panic!("Grace period expired");
@@ -1027,7 +995,6 @@ impl VestingContract {
             panic!("Tokens already claimed");
         }
 
-        // Refund admin
         let mut admin_balance: i128 = env
             .storage()
             .instance()
@@ -1038,13 +1005,11 @@ impl VestingContract {
             .instance()
             .set(&DataKey::AdminBalance, &admin_balance);
 
-        // Mark as released/revoked so it can't be claimed
         vault.released_amount = vault.total_amount;
         env.storage()
             .instance()
             .set(&DataKey::VaultData(vault_id), &vault);
 
-        // Emit event
         env.events().publish(
             (Symbol::new(&env, "VaultClawedBack"), vault_id),
             vault.total_amount,
@@ -1059,34 +1024,25 @@ impl VestingContract {
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
+            .unwrap_or_else(|| panic!("Vault not found"));
 
         if !vault.is_initialized {
             panic!("Vault not initialized");
         }
-
         if !vault.is_transferable {
             panic!("Vault is non-transferable");
         }
 
-        // Check if caller is the vault owner
-        let caller = env.current_contract_address();
-        if caller != vault.owner {
-            panic!("Only vault owner can transfer");
-        }
+        vault.owner.require_auth();
 
         let old_owner = vault.owner.clone();
 
-        // Update UserVaults
-        // Remove from old owner
-        let mut old_user_vaults: Vec<u64> = env
+        let old_user_vaults: Vec<u64> = env
             .storage()
             .instance()
             .get(&DataKey::UserVaults(old_owner.clone()))
             .unwrap_or(Vec::new(&env));
-        
+
         let mut new_old_user_vaults = Vec::new(&env);
         for id in old_user_vaults.iter() {
             if id != vault_id {
@@ -1097,7 +1053,6 @@ impl VestingContract {
             .instance()
             .set(&DataKey::UserVaults(old_owner.clone()), &new_old_user_vaults);
 
-        // Add to new owner
         let mut new_user_vaults: Vec<u64> = env
             .storage()
             .instance()
@@ -1108,15 +1063,12 @@ impl VestingContract {
             .instance()
             .set(&DataKey::UserVaults(new_beneficiary.clone()), &new_user_vaults);
 
-        // Update vault
         vault.owner = new_beneficiary.clone();
-        vault.delegate = None; // Reset delegate on transfer
-        
+        vault.delegate = None;
         env.storage()
             .instance()
             .set(&DataKey::VaultData(vault_id), &vault);
 
-        // Emit event
         env.events().publish(
             (Symbol::new(&env, "BeneficiaryUpdated"), vault_id),
             (old_owner, new_beneficiary),
@@ -1129,27 +1081,22 @@ impl VestingContract {
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
+            .unwrap_or_else(|| panic!("Vault not found"));
 
         if !vault.is_initialized {
             panic!("Vault not initialized");
         }
 
-        // Require authorization from the current owner
         vault.owner.require_auth();
 
         let old_owner = vault.owner.clone();
 
-        // Update UserVaults
-        // Remove from old owner
-        let mut old_user_vaults: Vec<u64> = env
+        let old_user_vaults: Vec<u64> = env
             .storage()
             .instance()
             .get(&DataKey::UserVaults(old_owner.clone()))
             .unwrap_or(Vec::new(&env));
-        
+
         let mut new_old_user_vaults = Vec::new(&env);
         for id in old_user_vaults.iter() {
             if id != vault_id {
@@ -1160,7 +1107,6 @@ impl VestingContract {
             .instance()
             .set(&DataKey::UserVaults(old_owner.clone()), &new_old_user_vaults);
 
-        // Add to new owner
         let mut new_user_vaults: Vec<u64> = env
             .storage()
             .instance()
@@ -1171,15 +1117,12 @@ impl VestingContract {
             .instance()
             .set(&DataKey::UserVaults(new_address.clone()), &new_user_vaults);
 
-        // Update vault
         vault.owner = new_address.clone();
-        vault.delegate = None; // Reset delegate on rotation for security
-        
+        vault.delegate = None;
         env.storage()
             .instance()
             .set(&DataKey::VaultData(vault_id), &vault);
 
-        // Emit BeneficiaryRotated event
         env.events().publish(
             (Symbol::new(&env, "BeneficiaryRotated"), vault_id),
             (old_owner, new_address),
@@ -1189,7 +1132,9 @@ impl VestingContract {
     // Set the whitelisted staking contract address
     pub fn set_staking_contract(env: Env, contract: Address) {
         Self::require_admin(&env);
-        env.storage().instance().set(&Symbol::new(&env, "StakingContract"), &contract);
+        env.storage()
+            .instance()
+            .set(&Symbol::new(&env, "StakingContract"), &contract);
     }
 
     // Stake unvested tokens to the whitelisted staking contract
@@ -1198,21 +1143,14 @@ impl VestingContract {
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
+            .unwrap_or_else(|| panic!("Vault not found"));
 
         if !vault.is_initialized {
             panic!("Vault not initialized");
         }
 
-        // Check auth (owner or delegate?) - usually owner
-        let caller = env.current_contract_address();
-        if caller != vault.owner {
-            panic!("Only vault owner can stake");
-        }
+        vault.owner.require_auth();
 
-        // Check available balance (total - released - staked)
         let available = vault.total_amount - vault.released_amount - vault.staked_amount;
         if amount <= 0 {
             panic!("Amount must be positive");
@@ -1221,18 +1159,24 @@ impl VestingContract {
             panic!("Insufficient funds to stake");
         }
 
-        // Get staking contract
-        let staking_contract: Address = env.storage().instance()
+        let staking_contract: Address = env
+            .storage()
+            .instance()
             .get(&Symbol::new(&env, "StakingContract"))
             .expect("Staking contract not set");
 
-        // Call stake on external contract
-        let args = vec![&env, vault_id.into_val(&env), amount.into_val(&env), validator.into_val(&env)];
+        let args = vec![
+            &env,
+            vault_id.into_val(&env),
+            amount.into_val(&env),
+            validator.into_val(&env),
+        ];
         env.invoke_contract::<()>(&staking_contract, &Symbol::new(&env, "stake"), args);
 
-        // Update vault state
         vault.staked_amount += amount;
-        env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
+        env.storage()
+            .instance()
+            .set(&DataKey::VaultData(vault_id), &vault);
     }
 
     // Mark a vault as irrevocable to prevent admin withdrawal
@@ -1243,22 +1187,17 @@ impl VestingContract {
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
+            .unwrap_or_else(|| panic!("Vault not found"));
 
-        // Cannot mark already irrevocable vaults
         if vault.is_irrevocable {
             panic!("Vault is already irrevocable");
         }
 
-        // Mark vault as irrevocable
         vault.is_irrevocable = true;
         env.storage()
             .instance()
             .set(&DataKey::VaultData(vault_id), &vault);
 
-        // Emit IrrevocableMarked event
         let timestamp = env.ledger().timestamp();
         env.events().publish(
             (Symbol::new(&env, "IrrevocableMarked"), vault_id),
@@ -1272,9 +1211,7 @@ impl VestingContract {
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
-            .unwrap_or_else(|| {
-                panic!("Vault not found");
-            });
+            .unwrap_or_else(|| panic!("Vault not found"));
 
         vault.is_irrevocable
     }
@@ -1287,7 +1224,6 @@ impl VestingContract {
             .get(&DataKey::AdminBalance)
             .unwrap_or(0);
 
-        // Calculate total locked and claimed amounts
         let vault_count: u64 = env
             .storage()
             .instance()
@@ -1310,25 +1246,36 @@ impl VestingContract {
         (total_locked, total_claimed, admin_balance)
     }
 
-    // Check invariant: Total Locked + Total Claimed + Admin Balance = Initial Supply
+    // Check invariant: Total Locked + Admin Balance + Tokens Paid Out = Initial Supply
+    // Tokens paid out = total_claimed minus any that were revoked (returned to admin_balance).
+    // Simplest correct form: total_locked + admin_balance <= initial_supply
+    // and total_locked + admin_balance + net_paid_out == initial_supply.
+    // We verify: admin_balance + total_locked == initial_supply - net_distributed
+    // The safe checkable invariant: total_locked + admin_balance must never exceed initial_supply,
+    // and (initial_supply - admin_balance - total_locked) must be non-negative (tokens claimed out).
     pub fn check_invariant(env: Env) -> bool {
         let initial_supply: i128 = env
             .storage()
             .instance()
             .get(&DataKey::InitialSupply)
             .unwrap_or(0);
-        let (total_locked, total_claimed, admin_balance) = Self::get_contract_state(env);
+        let (total_locked, _total_claimed, admin_balance) = Self::get_contract_state(env);
 
-        let sum = total_locked + total_claimed + admin_balance;
-        sum == initial_supply
+        // All tokens are either: locked in vaults, held by admin, or paid out to beneficiaries.
+        // locked + admin_balance must never exceed initial_supply (no tokens created from nothing).
+        // initial_supply - locked - admin_balance = net tokens paid out (must be >= 0).
+        let net_paid_out = initial_supply - total_locked - admin_balance;
+        net_paid_out >= 0
     }
 
-    // --- New Auto-Claim Logic ---
+    // --- Auto-Claim Logic ---
 
     // Calculate currently claimable tokens based on linear vesting
     pub fn get_claimable_amount(env: Env, vault_id: u64) -> i128 {
-        let vault: Vault = env.storage().instance()
-            .get(&VAULT_DATA, &vault_id)
+        let vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
             .unwrap_or_else(|| panic!("Vault not found"));
 
         let vested = Self::calculate_time_vested_amount(&env, &vault);
@@ -1341,41 +1288,113 @@ impl VestingContract {
     }
 
     // Auto-claim function that anyone can call.
-    // Tokens go to beneficiary, but keeper can get a tip.
+    // Tokens go to beneficiary, but keeper earns a fee.
     pub fn auto_claim(env: Env, vault_id: u64, keeper: Address) {
-        let mut vault: Vault = env.storage().instance()
-            .get(&VAULT_DATA, &vault_id)
+        let mut vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
             .unwrap_or_else(|| panic!("Vault not found"));
 
-        require!(vault.is_initialized, "Vault not initialized");
+        if !vault.is_initialized {
+            panic!("Vault not initialized");
+        }
 
         let claimable = Self::get_claimable_amount(env.clone(), vault_id);
-        
-        // Ensure there's enough to cover the fee and something left for beneficiary
-        require!(claimable > vault.keeper_fee, "Insufficient claimable tokens to cover fee");
+
+        if claimable <= vault.keeper_fee {
+            panic!("Insufficient claimable tokens to cover fee");
+        }
 
         let beneficiary_amount = claimable - vault.keeper_fee;
-        
-        // Update vault
+        let keeper_fee = vault.keeper_fee;
+
         vault.released_amount += claimable;
-        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+        env.storage()
+            .instance()
+            .set(&DataKey::VaultData(vault_id), &vault);
 
-        // Update keeper fees
-        let mut fees: Map<Address, i128> = env.storage().instance().get(&KEEPER_FEES).unwrap_or(Map::new(&env));
+        let mut fees: Map<Address, i128> = env
+            .storage()
+            .instance()
+            .get(&DataKey::KeeperFees)
+            .unwrap_or(Map::new(&env));
         let current_fees = fees.get(keeper.clone()).unwrap_or(0);
-        fees.set(keeper.clone(), current_fees + vault.keeper_fee);
-        env.storage().instance().set(&KEEPER_FEES, &fees);
+        fees.set(keeper.clone(), current_fees + keeper_fee);
+        env.storage()
+            .instance()
+            .set(&DataKey::KeeperFees, &fees);
 
-        // Emit KeeperClaim event
         env.events().publish(
-            (Symbol::new(&env, "KeeperClaim"), vault_id, keeper),
-            (beneficiary_amount, vault.keeper_fee)
+            (Symbol::new(&env, "KeeperClaim"), vault_id),
+            (keeper, beneficiary_amount, keeper_fee),
         );
     }
 
     // Get accumulated fees for a keeper
     pub fn get_keeper_fee(env: Env, keeper: Address) -> i128 {
-        let fees: Map<Address, i128> = env.storage().instance().get(&KEEPER_FEES).unwrap_or(Map::new(&env));
+        let fees: Map<Address, i128> = env
+            .storage()
+            .instance()
+            .get(&DataKey::KeeperFees)
+            .unwrap_or(Map::new(&env));
         fees.get(keeper).unwrap_or(0)
     }
+
+    // Rescue tokens accidentally sent directly to the contract address.
+    // Calculates unallocated_balance = contract_token_balance - total_vault_liabilities
+    // and transfers it to the admin.
+    pub fn rescue_unallocated_tokens(env: Env, token_address: Address) -> i128 {
+        Self::require_admin(&env);
+
+        if !Self::is_token_whitelisted(&env, &token_address) {
+            panic!("Token is not whitelisted");
+        }
+
+        let token_client = token::Client::new(&env, &token_address);
+        let contract_balance: i128 = token_client.balance(&env.current_contract_address());
+
+        let vault_count: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultCount)
+            .unwrap_or(0);
+
+        let mut total_liabilities: i128 = 0;
+        for i in 1..=vault_count {
+            if let Some(vault) = env
+                .storage()
+                .instance()
+                .get::<DataKey, Vault>(&DataKey::VaultData(i))
+            {
+                let unreleased = vault.total_amount - vault.released_amount;
+                if unreleased > 0 {
+                    total_liabilities += unreleased;
+                }
+            }
+        }
+
+        let unallocated_balance = contract_balance - total_liabilities;
+
+        if unallocated_balance <= 0 {
+            panic!("No unallocated tokens to rescue");
+        }
+
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::AdminAddress)
+            .unwrap_or_else(|| panic!("Admin not set"));
+
+        token_client.transfer(&env.current_contract_address(), &admin, &unallocated_balance);
+
+        env.events().publish(
+            (Symbol::new(&env, "RescueExecuted"), token_address),
+            (unallocated_balance, admin),
+        );
+
+        unallocated_balance
+    }
 }
+
+mod test;

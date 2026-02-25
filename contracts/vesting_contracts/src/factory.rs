@@ -1,4 +1,4 @@
-use soroban_sdk::{contract, contractimpl, contractmeta, contracttype, Address, BytesN, Env, Vec};
+use soroban_sdk::{contract, contractimpl, contractmeta, contracttype, Map, Address, BytesN, Env, Vec};
 
 // Contract metadata for the factory
 contractmeta!(
