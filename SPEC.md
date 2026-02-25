@@ -292,6 +292,7 @@ Lazy vaults have their `USER_VAULTS` index populated on first access via `initia
 
 #### `create_vault_full(owner, amount, start_time, end_time) → u64`
 - Admin-only.
+- Requires `(end_time - start_time) ≤ MAX_DURATION` where `MAX_DURATION = 315,360,000` seconds (10 years). Panics otherwise.
 - Deducts `amount` from `ADMIN_BALANCE`. Panics if insufficient.
 - Writes full vault struct with `is_initialized = true`.
 - Updates `USER_VAULTS[owner]`.
@@ -300,6 +301,7 @@ Lazy vaults have their `USER_VAULTS` index populated on first access via `initia
 
 #### `create_vault_lazy(owner, amount, start_time, end_time) → u64`
 - Admin-only.
+- Requires `(end_time - start_time) ≤ MAX_DURATION` where `MAX_DURATION = 315,360,000` seconds (10 years). Panics otherwise.
 - Same as above but sets `is_initialized = false` and skips `USER_VAULTS` write.
 - Lower storage cost at creation time.
 
@@ -326,6 +328,7 @@ Lazy vaults have their `USER_VAULTS` index populated on first access via `initia
 #### `batch_create_vaults_lazy(batch_data) → Vec<u64>`
 - Admin-only.
 - Validates total batch amount against `ADMIN_BALANCE` in a single check upfront.
+- Requires each vault’s `(end_time - start_time) ≤ MAX_DURATION` where `MAX_DURATION = 315,360,000` seconds (10 years). Panics otherwise.
 - Creates all vaults lazily in a loop. Updates `VAULT_COUNT` once at the end.
 
 #### `batch_create_vaults_full(batch_data) → Vec<u64>`

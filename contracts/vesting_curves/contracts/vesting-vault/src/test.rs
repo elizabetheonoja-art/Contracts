@@ -1,4 +1,3 @@
-
 #![cfg(test)]
 
 extern crate std;
@@ -23,7 +22,6 @@ struct Setup {
     env: Env,
     vault: VestingVaultClient<'static>,
     token: Address,
-    admin: Address,
     beneficiary: Address,
 }
 
@@ -61,7 +59,7 @@ fn create_setup(curve: VestingCurve) -> Setup {
         &curve,
     );
 
-    Setup { env, vault, token, admin, beneficiary }
+    Setup { env, vault, token, beneficiary }
 }
 
 // ---------------------------------------------------------------------------
@@ -255,4 +253,69 @@ fn i6_double_claim_only_yields_incremental_amount() {
     // Total received = TOTAL
     let bal = TokenClient::new(&s.env, &s.token).balance(&s.beneficiary);
     assert_eq!(bal, TOTAL);
+}
+
+// ── Duration cap (Issue #44) ────────────────────────────────────────────────
+
+#[test]
+fn i7_initialize_allows_max_duration() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token = token_id.address();
+    StellarAssetClient::new(&env, &token).mint(&admin, &TOTAL);
+
+    let vault_id = env.register(crate::VestingVault, ());
+    let vault = VestingVaultClient::new(&env, &vault_id);
+
+    TokenClient::new(&env, &token).transfer(&admin, &vault_id, &TOTAL);
+    env.ledger().with_mut(|l| l.timestamp = START);
+
+    vault.initialize(
+        &admin,
+        &beneficiary,
+        &token,
+        &TOTAL,
+        &START,
+        &crate::MAX_DURATION,
+        &VestingCurve::Linear,
+    );
+    assert_eq!(vault.get_curve(), VestingCurve::Linear);
+}
+
+#[test]
+#[should_panic(expected = "duration exceeds MAX_DURATION")]
+fn i8_initialize_rejects_duration_over_max() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+    let token_admin = Address::generate(&env);
+
+    let token_id = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token = token_id.address();
+    StellarAssetClient::new(&env, &token).mint(&admin, &TOTAL);
+
+    let vault_id = env.register(crate::VestingVault, ());
+    let vault = VestingVaultClient::new(&env, &vault_id);
+
+    TokenClient::new(&env, &token).transfer(&admin, &vault_id, &TOTAL);
+    env.ledger().with_mut(|l| l.timestamp = START);
+
+    let too_long = crate::MAX_DURATION + 1;
+    vault.initialize(
+        &admin,
+        &beneficiary,
+        &token,
+        &TOTAL,
+        &START,
+        &too_long,
+        &VestingCurve::Linear,
+    );
 }

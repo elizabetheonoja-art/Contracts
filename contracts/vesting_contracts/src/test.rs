@@ -86,6 +86,34 @@ mod tests {
         assert_eq!(id, 1u64);
     }
 
+    #[test]
+    #[should_panic(expected = "duration exceeds MAX_DURATION")]
+    fn test_create_vault_full_rejects_duration_over_max() {
+        let (env, _cid, client, _admin) = setup();
+        let beneficiary = Address::generate(&env);
+        let start = env.ledger().timestamp();
+        let end = start + crate::MAX_DURATION + 1;
+
+        client.create_vault_full(
+            &beneficiary, &1_000i128, &start, &end,
+            &0i128, &true, &false, &0u64,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "duration exceeds MAX_DURATION")]
+    fn test_create_vault_lazy_rejects_duration_over_max() {
+        let (env, _cid, client, _admin) = setup();
+        let beneficiary = Address::generate(&env);
+        let start = env.ledger().timestamp();
+        let end = start + crate::MAX_DURATION + 1;
+
+        client.create_vault_lazy(
+            &beneficiary, &1_000i128, &start, &end,
+            &0i128, &true, &false, &0u64,
+        );
+    }
+
     // -------------------------------------------------------------------------
     // Batch vault creation
     // -------------------------------------------------------------------------
@@ -128,6 +156,27 @@ mod tests {
 
         let ids = client.batch_create_vaults_full(&batch);
         assert_eq!(ids.len(), 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "duration exceeds MAX_DURATION")]
+    fn test_batch_create_vaults_rejects_duration_over_max() {
+        let (env, _cid, client, _admin) = setup();
+        let r1 = Address::generate(&env);
+
+        let start = 100u64;
+        let end = start + crate::MAX_DURATION + 1;
+
+        let batch = BatchCreateData {
+            recipients:     vec![&env, r1],
+            amounts:        vec![&env, 1_000i128],
+            start_times:    vec![&env, start],
+            end_times:      vec![&env, end],
+            keeper_fees:    vec![&env, 0i128],
+            step_durations: vec![&env, 0u64],
+        };
+
+        client.batch_create_vaults_lazy(&batch);
     }
 
     // -------------------------------------------------------------------------

@@ -26,6 +26,9 @@ pub enum DataKey {
 const VAULT_DATA: DataKey = DataKey::VaultData(0); // Placeholder, will be indexed dynamically
 const KEEPER_FEES: Symbol = Symbol::short(&"keeper_fees");
 
+// 10 years in seconds (Issue #44)
+const MAX_DURATION: u64 = 315_360_000;
+
 mod factory;
 pub use factory::{VestingFactory, VestingFactoryClient};
 
@@ -105,6 +108,15 @@ pub struct VaultCreated {
 #[contractimpl]
 #[allow(deprecated)]
 impl VestingContract {
+    fn require_valid_duration(start_time: u64, end_time: u64) {
+        let duration = end_time
+            .checked_sub(start_time)
+            .unwrap_or_else(|| panic!("end_time must be >= start_time"));
+        if duration > MAX_DURATION {
+            panic!("duration exceeds MAX_DURATION");
+        }
+    }
+
     // Admin-only: Add token to whitelist
     pub fn add_to_whitelist(env: Env, token: Address) {
         Self::require_admin(&env);
@@ -272,6 +284,7 @@ impl VestingContract {
     ) -> u64 {
 
         Self::require_admin(&env);
+        Self::require_valid_duration(start_time, end_time);
 
         let mut vault_count: u64 = env
             .storage()
@@ -360,6 +373,7 @@ impl VestingContract {
         step_duration: u64,
     ) -> u64 {
         Self::require_admin(&env);
+        Self::require_valid_duration(start_time, end_time);
 
         let mut vault_count: u64 = env
             .storage()
@@ -802,6 +816,12 @@ impl VestingContract {
     pub fn batch_create_vaults_lazy(env: Env, batch_data: BatchCreateData) -> Vec<u64> {
         Self::require_admin(&env);
 
+        for i in 0..batch_data.recipients.len() {
+            let start_time = batch_data.start_times.get(i).unwrap();
+            let end_time = batch_data.end_times.get(i).unwrap();
+            Self::require_valid_duration(start_time, end_time);
+        }
+
         let mut vault_ids = Vec::new(&env);
         let initial_count: u64 = env
             .storage()
@@ -876,6 +896,12 @@ impl VestingContract {
     // Batch create vaults with full initialization
     pub fn batch_create_vaults_full(env: Env, batch_data: BatchCreateData) -> Vec<u64> {
         Self::require_admin(&env);
+
+        for i in 0..batch_data.recipients.len() {
+            let start_time = batch_data.start_times.get(i).unwrap();
+            let end_time = batch_data.end_times.get(i).unwrap();
+            Self::require_valid_duration(start_time, end_time);
+        }
 
         let mut vault_ids = Vec::new(&env);
         let initial_count: u64 = env
