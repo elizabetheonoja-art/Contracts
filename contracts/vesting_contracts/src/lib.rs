@@ -1,4 +1,4 @@
-#![no_std]
+ #![no_std]
 use soroban_sdk::{contract, contractimpl, contracttype, token, vec, Address, Env, IntoVal, Map, Symbol, Vec};
 
 // DataKey for whitelisted tokens
