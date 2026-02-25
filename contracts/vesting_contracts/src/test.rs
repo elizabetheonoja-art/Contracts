@@ -1036,6 +1036,105 @@ impl MockStakingContract {
 
         client.rescue_unallocated_tokens(&token_addr); // must panic
     }
+
+    // -------------------------------------------------------------------------
+    // Zero-duration vault fuzz tests (Issue #41)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_zero_duration_vault_immediate_unlock() {
+        let (env, _cid, client, _admin) = setup();
+        let beneficiary = Address::generate(&env);
+        let now = env.ledger().timestamp();
+
+        let vault_id = client.create_vault_full(
+            &beneficiary, &5_000i128, &now, &now,
+            &0i128, &true, &false, &0u64,
+        );
+
+        let claimable = client.get_claimable_amount(&vault_id);
+        assert_eq!(claimable, 5_000i128, "zero-duration vault should unlock 100% immediately");
+    }
+
+    #[test]
+    fn test_zero_duration_vault_claim_full() {
+        let (env, _cid, client, _admin) = setup();
+        let beneficiary = Address::generate(&env);
+        let now = env.ledger().timestamp();
+
+        let vault_id = client.create_vault_full(
+            &beneficiary, &10_000i128, &now, &now,
+            &0i128, &true, &false, &0u64,
+        );
+
+        let claimed = client.claim_tokens(&vault_id, &10_000i128);
+        assert_eq!(claimed, 10_000i128, "should claim full amount from zero-duration vault");
+
+        let vault = client.get_vault(&vault_id);
+        assert_eq!(vault.released_amount, 10_000i128);
+    }
+
+    #[test]
+    fn test_zero_duration_vault_before_start() {
+        let (env, _cid, client, _admin) = setup();
+        let beneficiary = Address::generate(&env);
+        let future = env.ledger().timestamp() + 1_000;
+
+        let vault_id = client.create_vault_full(
+            &beneficiary, &5_000i128, &future, &future,
+            &0i128, &true, &false, &0u64,
+        );
+
+        let claimable = client.get_claimable_amount(&vault_id);
+        assert_eq!(claimable, 0, "zero-duration vault should not unlock before start_time");
+    }
+
+    #[test]
+    fn test_zero_cliff_vault_vests_immediately() {
+        let (env, _cid, client, _admin) = setup();
+        let beneficiary = Address::generate(&env);
+        let now = env.ledger().timestamp();
+
+        let vault_id = client.create_vault_full(
+            &beneficiary, &10_000i128, &now, &(now + 1_000),
+            &0i128, &true, &false, &0u64,
+        );
+
+        env.ledger().with_mut(|l| l.timestamp = now + 500);
+        let claimable = client.get_claimable_amount(&vault_id);
+        assert!(claimable > 0, "zero-cliff vault should vest from start_time");
+    }
+
+    #[test]
+    fn test_zero_amount_vault_no_claimable() {
+        let (env, _cid, client, _admin) = setup();
+        let beneficiary = Address::generate(&env);
+        let now = env.ledger().timestamp();
+
+        let vault_id = client.create_vault_full(
+            &beneficiary, &0i128, &now, &(now + 1_000),
+            &0i128, &true, &false, &0u64,
+        );
+
+        env.ledger().with_mut(|l| l.timestamp = now + 1_001);
+        let claimable = client.get_claimable_amount(&vault_id);
+        assert_eq!(claimable, 0, "zero-amount vault should have nothing claimable");
+    }
+
+    #[test]
+    fn test_zero_duration_zero_amount_vault() {
+        let (env, _cid, client, _admin) = setup();
+        let beneficiary = Address::generate(&env);
+        let now = env.ledger().timestamp();
+
+        let vault_id = client.create_vault_full(
+            &beneficiary, &0i128, &now, &now,
+            &0i128, &true, &false, &0u64,
+        );
+
+        let claimable = client.get_claimable_amount(&vault_id);
+        assert_eq!(claimable, 0, "zero-duration + zero-amount vault should have nothing claimable");
+    }
 }
     });
     assert!(result.is_err());
