@@ -641,6 +641,7 @@ impl MockStakingContract {
     pub fn stake(env: Env, vault_id: u64, amount: i128, _validator: Address) {
         env.events().publish((Symbol::new(&env, "stake"), vault_id), amount);
     }
+}
 
     pub fn unstake(env: Env, vault_id: u64, amount: i128) {
         env.events()

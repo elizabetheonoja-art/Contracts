@@ -203,14 +203,29 @@ All values stored in `instance` storage.
 
 ```rust
 pub struct Vault {
-    pub owner: Address,          // Current beneficiary
-    pub total_amount: i128,      // Total tokens in this vault
-    pub released_amount: i128,   // Tokens already claimed or revoked
-    pub start_time: u64,         // Vesting start (unix timestamp)
-    pub end_time: u64,           // Vesting end (unix timestamp)
-    pub is_initialized: bool,    // Lazy init flag
+    // i128 (largest)
+    pub total_amount: i128, // = initial_deposit_shares
+    pub released_amount: i128,
+    pub keeper_fee: i128,
+    pub staked_amount: i128,
+
+    // 8-byte values
+    pub owner: Address,
+    pub delegate: Option<Address>,
+    pub title: String,
+    pub start_time: u64,
+    pub end_time: u64,
+    pub creation_time: u64,
+    pub step_duration: u64,
+
+    // bools (smallest)
+    pub is_initialized: bool,
+    pub is_irrevocable: bool,
+    pub is_transferable: bool,
 }
 ```
+
+> **Soroban serialization note:** `#[contracttype]` structs are serialized as an ordered tuple (field order matters). Reordering fields changes the on-ledger schema and requires a migration strategy if any `Vault` entries already exist. Storage serialization has no alignment padding; this change primarily reduces Rust in-memory padding. For upgrade-safe evolution, prefer explicit versioning (e.g., `VaultV1`/`VaultV2`) over reordering existing fields.
 
 > **Note for auditors:** The `VestingContract` does not compute a vested amount internally. It tracks `total_amount` and `released_amount` only. The actual time-based vesting calculation — and any enforcement of `start_time`/`end_time` at claim time — is **not present** in `claim_tokens()`. Any caller can claim any unreleased amount regardless of the current time. This is a significant design note detailed further in [Known Limitations](#known-limitations--auditor-notes).
 
