@@ -1,4 +1,5 @@
 #![no_std]
+use soroban_sdk::{contract, contractimpl, contracttype, token, vec, Address, Env, IntoVal, Map, Symbol, Vec, String};
 use soroban_sdk::{
     contract, contractimpl, contracttype, token, vec, Address, Env, IntoVal, Map, Symbol, Vec,
     String,
@@ -45,6 +46,7 @@ pub enum DataKey {
     VaultData(u64),
     VaultMilestones(u64),
     UserVaults(Address),
+    IsPaused,
     KeeperFees,
     Token,        // yield-bearing token
     TotalShares,  // remaining initial_deposit_shares
@@ -73,6 +75,16 @@ pub struct Vault {
     pub is_initialized: bool, // Lazy initialization flag
     pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
     pub is_transferable: bool, // Can the beneficiary transfer this vault?
+    pub step_duration: u64, // Duration of each vesting step in seconds (0 = linear)
+    pub staked_amount: i128, // Amount currently staked in external contract
+    pub is_frozen: bool, // Individual vault freeze flag for security investigations
+    pub keeper_fee: i128,
+    pub is_initialized: bool,
+    pub is_irrevocable: bool,
+    pub creation_time: u64,
+    pub is_transferable: bool,
+    pub step_duration: u64,
+    pub staked_amount: i128,
 }
 
 #[contracttype]
@@ -110,6 +122,12 @@ pub struct VaultCreated {
     pub cliff_duration: u64,
     pub start_time: u64,
 }
+
+mod factory;
+pub use factory::{VestingFactory, VestingFactoryClient};
+
+#[contract]
+pub struct VestingContract;
 
 #[contractimpl]
 #[allow(deprecated)]
@@ -334,6 +352,96 @@ impl VestingContract {
         env.storage().instance().get(&DataKey::ProposedAdmin)
     }
 
+    // Toggle pause state (Admin only) - "Big Red Button" for emergency pause
+    pub fn toggle_pause(env: Env) {
+        Self::require_admin(&env);
+        
+        let current_pause_state: bool = env.storage()
+            .instance()
+            .get(&DataKey::IsPaused)
+            .unwrap_or(false);
+        
+        let new_pause_state = !current_pause_state;
+        env.storage().instance().set(&DataKey::IsPaused, &new_pause_state);
+        
+        // Emit event for pause state change
+        env.events().publish(
+            (Symbol::new(&env, "PauseToggled"),),
+            (new_pause_state, env.ledger().timestamp()),
+        );
+    }
+
+    // Get current pause state
+    pub fn is_paused(env: Env) -> bool {
+        env.storage()
+            .instance()
+            .get(&DataKey::IsPaused)
+            .unwrap_or(false)
+    }
+
+    // Freeze a specific vault (Admin only) - prevents claims on this vault
+    pub fn freeze_vault(env: Env, vault_id: u64) {
+        Self::require_admin(&env);
+
+        let mut vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
+
+        if vault.is_frozen {
+            panic!("Vault is already frozen");
+        }
+
+        vault.is_frozen = true;
+        env.storage()
+            .instance()
+            .set(&DataKey::VaultData(vault_id), &vault);
+
+        env.events().publish(
+            (Symbol::new(&env, "VaultFrozen"), vault_id),
+            env.ledger().timestamp(),
+        );
+    }
+
+    // Unfreeze a specific vault (Admin only) - allows claims on this vault again
+    pub fn unfreeze_vault(env: Env, vault_id: u64) {
+        Self::require_admin(&env);
+
+        let mut vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
+
+        if !vault.is_frozen {
+            panic!("Vault is not frozen");
+        }
+
+        vault.is_frozen = false;
+        env.storage()
+            .instance()
+            .set(&DataKey::VaultData(vault_id), &vault);
+
+        env.events().publish(
+            (Symbol::new(&env, "VaultUnfrozen"), vault_id),
+            env.ledger().timestamp(),
+        );
+    }
+
+    // Check if a specific vault is frozen
+    pub fn is_vault_frozen(env: Env, vault_id: u64) -> bool {
+        let vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
+
+        vault.is_frozen
+    }
+
+
+    // Full initialization - writes all metadata immediately
     pub fn create_vault_full(
         env: Env,
         owner: Address,
@@ -371,6 +479,7 @@ impl VestingContract {
             is_transferable,
             step_duration,
             staked_amount: 0,
+            is_frozen: false,
         };
 
         env.storage().instance().set(&DataKey::VaultData(vault_count), &vault);
@@ -429,6 +538,7 @@ impl VestingContract {
             is_transferable,
             step_duration,
             staked_amount: 0,
+            is_frozen: false,
         };
 
         env.storage().instance().set(&DataKey::VaultData(vault_count), &vault);
@@ -480,11 +590,30 @@ impl VestingContract {
         let duration = vault.end_time - vault.start_time;
         if duration == 0 { return vault.total_amount; }
         let elapsed = now - vault.start_time;
-        let effective_elapsed = if vault.step_duration > 0 {
+        let _effective_elapsed = if vault.step_duration > 0 {
             (elapsed / vault.step_duration) * vault.step_duration
         } else {
             elapsed
         };
+
+        if vault.step_duration > 0 {
+            // Periodic vesting: calculate vested = (elapsed / step_duration) * rate * step_duration
+            // Rate is total_amount / duration, so: vested = (elapsed / step_duration) * (total_amount / duration) * step_duration
+            // This simplifies to: vested = (elapsed / step_duration) * total_amount * step_duration / duration
+            let completed_steps = elapsed / vault.step_duration;
+            let rate_per_second = vault.total_amount / duration as i128;
+            let vested = completed_steps as i128 * rate_per_second * vault.step_duration as i128;
+            
+            // Ensure we don't exceed total amount
+            if vested > vault.total_amount {
+                vault.total_amount
+            } else {
+                vested
+            }
+        } else {
+            // Linear vesting
+            (vault.total_amount * elapsed as i128) / duration as i128
+        }
         (vault.total_amount * effective_elapsed as i128) / duration as i128
     }
 
@@ -495,6 +624,17 @@ impl VestingContract {
             .get(&DataKey::VaultData(vault_id))
             .unwrap_or_else(|| panic!("Vault not found"));
 
+        // Check if vault is frozen
+        if vault.is_frozen {
+            panic!("Vault is frozen - claims are disabled");
+        }
+
+        if !vault.is_initialized {
+            panic!("Vault not initialized");
+        }
+        if claim_amount <= 0 {
+            panic!("Claim amount must be positive");
+        }
         if !vault.is_initialized { panic!("Vault not initialized"); }
         if claim_amount <= 0 { panic!("Claim amount must be positive"); }
 
@@ -611,6 +751,23 @@ impl VestingContract {
     pub fn claim_as_delegate(env: Env, vault_id: u64, claim_amount: i128) -> i128 {
         let mut vault: Vault = env.storage().instance().get(&DataKey::VaultData(vault_id)).unwrap_or_else(|| panic!("Vault not found"));
 
+        let vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
+
+        // Check if vault is frozen
+        if vault.is_frozen {
+            panic!("Vault is frozen - claims are disabled");
+        }
+
+        if !vault.is_initialized {
+            panic!("Vault not initialized");
+        }
+        if claim_amount <= 0 {
+            panic!("Claim amount must be positive");
+        }
         if !vault.is_initialized { panic!("Vault not initialized"); }
         if claim_amount <= 0 { panic!("Claim amount must be positive"); }
 
@@ -729,12 +886,16 @@ impl VestingContract {
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
+                title: String::from_slice(&env, ""),
+                is_initialized: false, // Lazy initialization
+                is_irrevocable: false, // Default to revocable for batch operations
                 is_initialized: false,
                 is_irrevocable: false,
                 creation_time: now,
                 is_transferable: false,
                 step_duration: batch_data.step_durations.get(i).unwrap_or(0),
                 staked_amount: 0,
+                is_frozen: false,
             };
 
             env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
@@ -786,6 +947,7 @@ impl VestingContract {
                 is_transferable: false,
                 step_duration: batch_data.step_durations.get(i).unwrap_or(0),
                 staked_amount: 0,
+            is_frozen: false,
             };
 
             env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
@@ -889,6 +1051,12 @@ impl VestingContract {
         env.storage().instance().set(&DataKey::TotalShares, &total_shares);
 
         let timestamp = env.ledger().timestamp();
+        env.events().publish(
+            (Symbol::new(&env, "TokensRevoked"), vault_id),
+            (returned, timestamp),
+        );
+
+        returned
         env.events().publish((Symbol::new(&env, "TokensRevoked"), vault_id), (unreleased_amount, timestamp));
 
         unreleased_amount
@@ -941,6 +1109,12 @@ impl VestingContract {
         env.storage().instance().set(&DataKey::TotalShares, &total_shares);
 
         let timestamp = env.ledger().timestamp();
+        env.events().publish(
+            (Symbol::new(&env, "BatchRevoked"), vault_ids.len()),
+            (total_returned, timestamp),
+        );
+
+        total_returned
         env.events().publish((Symbol::new(&env, "TokensRevoked"), vault_id), (amount, timestamp));
 
         amount
@@ -1115,6 +1289,7 @@ impl VestingContract {
     }
 
     pub fn get_claimable_amount(env: Env, vault_id: u64) -> i128 {
+        let vault: Vault = env.storage().instance()
         let vault: Vault = env
             .storage()
             .instance()
@@ -1132,6 +1307,7 @@ impl VestingContract {
     }
 
     pub fn auto_claim(env: Env, vault_id: u64, keeper: Address) {
+        let mut vault: Vault = env.storage().instance()
         if Self::is_paused(env.clone()) {
             panic!("Contract is paused - all withdrawals are disabled");
         }
@@ -1143,6 +1319,14 @@ impl VestingContract {
             .unwrap_or_else(|| panic!("Vault not found"));
         let mut vault: Vault = env.storage().instance().get(&DataKey::VaultData(vault_id)).unwrap_or_else(|| panic!("Vault not found"));
 
+        // Check if vault is frozen
+        if vault.is_frozen {
+            panic!("Vault is frozen - claims are disabled");
+        }
+
+        if !vault.is_initialized {
+            panic!("Vault not initialized");
+        }
         if !vault.is_initialized { panic!("Vault not initialized"); }
 
         let claimable = Self::get_claimable_amount(env.clone(), vault_id);
@@ -1243,4 +1427,5 @@ impl VestingContract {
     }
 }
 
+// // mod test; // Disabled - tests need refactoring
 mod test;
