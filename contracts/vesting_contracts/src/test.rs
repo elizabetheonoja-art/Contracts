@@ -62,6 +62,66 @@ mod tests {
         assert_eq!(client.get_proposed_admin(), None);
     }
 
+    // -------------------------------------------------------------------------
+    // Migration / deprecation (Issue #43)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_migrate_liquidity_freezes_and_transfers_whitelisted_balances() {
+        let (env, contract_id, client, admin) = setup();
+
+        // Whitelist + fund the contract with a token balance.
+        let token_addr = register_token(&env, &admin);
+        client.add_to_whitelist(&token_addr);
+        mint_to(&env, &token_addr, &contract_id, 1_000i128);
+
+        let v2 = Address::generate(&env);
+        let token_client = token::Client::new(&env, &token_addr);
+
+        let migrated = client.migrate_liquidity(&v2);
+
+        assert!(client.is_deprecated());
+        assert_eq!(client.get_migration_target(), Some(v2.clone()));
+        assert!(client.is_paused());
+
+        assert_eq!(migrated.get(token_addr.clone()).unwrap_or(0), 1_000i128);
+        assert_eq!(token_client.balance(&contract_id), 0);
+        assert_eq!(token_client.balance(&v2), 1_000i128);
+    }
+
+    #[test]
+    fn test_migrate_liquidity_blocks_admin_actions_afterwards() {
+        let (env, contract_id, client, admin) = setup();
+
+        let token_addr = register_token(&env, &admin);
+        client.add_to_whitelist(&token_addr);
+        mint_to(&env, &token_addr, &contract_id, 1_000i128);
+
+        let v2 = Address::generate(&env);
+        client.migrate_liquidity(&v2);
+
+        let beneficiary = Address::generate(&env);
+        let now = env.ledger().timestamp();
+
+        let result = std::panic::catch_unwind(|| {
+            client.create_vault_full(
+                &beneficiary,
+                &1_000i128,
+                &now,
+                &(now + 1_000),
+                &0i128,
+                &true,
+                &false,
+                &0u64,
+            );
+        });
+        assert!(result.is_err());
+    }
+
+    // -------------------------------------------------------------------------
+    // Vault creation
+    // -------------------------------------------------------------------------
+
     #[test]
     fn test_create_vault_full_increments_count() {
         let (env, _cid, client, _admin, _token) = setup();
@@ -168,39 +228,7 @@ mod tests {
 
         env.ledger().with_mut(|l| l.timestamp = now + duration - 1);
         client.claim_tokens(&vault_id, &1i128);
-    });
-    assert!(result.is_err());
-    
-    // Test: Proposed admin can accept ownership
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&new_admin);
-    });
-    
-    client.accept_ownership();
-    
-    // Verify admin transfer completed
-    assert_eq!(client.get_admin(), new_admin);
-    assert_eq!(client.get_proposed_admin(), None);
-    
-    // Test: Old admin cannot propose new admin anymore
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&admin);
-    });
-    
-    let another_admin = Address::generate(&env);
-    let result = std::panic::catch_unwind(|| {
-        client.propose_new_admin(&another_admin);
-    });
-    assert!(result.is_err());
-    
-    // Test: New admin can propose admin changes
-    env.as_contract(&contract_id, || {
-        env.current_contract_address().set(&new_admin);
-    });
-    
-    client.propose_new_admin(&another_admin);
-    assert_eq!(client.get_proposed_admin(), Some(another_admin));
-}
+    }
 
 #[test]
 fn test_periodic_vesting_monthly_steps() {
@@ -613,6 +641,16 @@ impl MockStakingContract {
     pub fn stake(env: Env, vault_id: u64, amount: i128, _validator: Address) {
         env.events().publish((Symbol::new(&env, "stake"), vault_id), amount);
     }
+
+    pub fn unstake(env: Env, vault_id: u64, amount: i128) {
+        env.events()
+            .publish((Symbol::new(&env, "unstake"), vault_id), amount);
+    }
+}
+
+    // -------------------------------------------------------------------------
+    // Irrevocable vault
+    // -------------------------------------------------------------------------
 
     #[test]
     fn test_mark_irrevocable_flag() {
@@ -1072,22 +1110,6 @@ impl MockStakingContract {
         let claimable = client.get_claimable_amount(&vault_id);
         assert_eq!(claimable, 0, "zero-duration + zero-amount vault should have nothing claimable");
     }
-}
-    });
-    assert!(result.is_err());
-
-    // Check at end (should be 100% vested)
-    env.ledger().with_mut(|li| {
-        li.timestamp = end_time;
-    });
-    
-    // Should be able to claim full amount
-    let claimed = client.claim_tokens(&vault_id, &total_amount);
-    assert_eq!(claimed, total_amount);
-    
-    let vault = client.get_vault(&vault_id);
-    assert_eq!(vault.released_amount, total_amount);
-}
 
 #[test]
 fn test_vault_start_time_immutable() {
@@ -1226,4 +1248,6 @@ fn test_global_pause_functionality() {
     
     let claimed = client.claim_tokens(&vault_id, &100i128);
     assert_eq!(claimed, 100i128); // Should succeed
+}
+
 }

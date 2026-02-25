@@ -1,3 +1,8 @@
+#![no_std]
+use soroban_sdk::{
+    contract, contractimpl, contracttype, token, vec, Address, Env, IntoVal, Map, Symbol, Vec,
+    String,
+};
  #![no_std]
 use soroban_sdk::{contract, contractimpl, contracttype, token, vec, Address, Env, IntoVal, Map, Symbol, Vec};
 
@@ -7,12 +12,29 @@ pub enum WhitelistDataKey {
     WhitelistedTokens,
 }
 
+#[contracttype]
+pub enum DataKey {
+    AdminAddress,
+    AdminBalance,
+    InitialSupply,
+    ProposedAdmin,
+    VaultCount,
+    VaultData(u64),
+    UserVaults(Address),
+    VaultMilestones(u64),
+    KeeperFees,
+    IsPaused,
+    IsDeprecated,
+    MigrationTarget,
+}
+
 mod factory;
 pub use factory::{VestingFactory, VestingFactoryClient};
 
 #[contract]
 pub struct VestingContract;
 
+// Vault structure with lazy initialization
 #[contracttype]
 pub enum DataKey {
     AdminAddress,
@@ -38,6 +60,14 @@ pub struct Vault {
     pub released_amount: i128,
     pub start_time: u64,
     pub end_time: u64,
+    pub keeper_fee: i128, // Fee paid to anyone who triggers auto_claim
+    pub title: String, // Short human-readable title (max 32 chars)
+    pub is_initialized: bool, // Lazy initialization flag
+    pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
+    pub creation_time: u64, // Timestamp of creation for clawback grace period
+    pub is_transferable: bool, // Can the beneficiary transfer this vault?
+    pub step_duration: u64, // Duration of each vesting step in seconds (0 = linear)
+    pub staked_amount: i128, // Amount currently staked in external contract
     pub keeper_fee: i128,
     pub is_initialized: bool,
     pub is_irrevocable: bool,
@@ -86,6 +116,18 @@ pub struct VaultCreated {
 #[contractimpl]
 #[allow(deprecated)]
 impl VestingContract {
+    fn require_not_deprecated(env: &Env) {
+        let deprecated: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::IsDeprecated)
+            .unwrap_or(false);
+        if deprecated {
+            panic!("Contract is deprecated");
+        }
+    }
+
+    // Admin-only: Add token to whitelist
     pub fn add_to_whitelist(env: Env, token: Address) {
         Self::require_admin(&env);
         let mut whitelist: Map<Address, bool> = env
@@ -108,12 +150,47 @@ impl VestingContract {
         whitelist.get(token.clone()).unwrap_or(false)
     }
 
+    pub fn is_deprecated(env: Env) -> bool {
+        env.storage()
+            .instance()
+            .get(&DataKey::IsDeprecated)
+            .unwrap_or(false)
+    }
+
+    pub fn get_migration_target(env: Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::MigrationTarget)
+    }
+
+    // Initialize contract with initial supply
+    pub fn initialize(env: Env, admin: Address, initial_supply: i128) {
+        Self::require_not_deprecated(&env);
+
+        env.storage()
+            .instance()
+            .set(&DataKey::InitialSupply, &initial_supply);
+
+        env.storage()
+            .instance()
+            .set(&DataKey::AdminBalance, &initial_supply);
+
     pub fn initialize(env: Env, admin: Address, initial_supply: i128) {
         env.storage().instance().set(&DataKey::InitialSupply, &initial_supply);
         env.storage().instance().set(&DataKey::AdminBalance, &initial_supply);
         env.storage().instance().set(&DataKey::AdminAddress, &admin);
         env.storage().instance().set(&DataKey::VaultCount, &0u64);
 
+        // Initialize pause state to false (unpaused)
+        env.storage().instance().set(&DataKey::IsPaused, &false);
+
+        // Initialize deprecated state to false (active)
+        env.storage()
+            .instance()
+            .set(&DataKey::IsDeprecated, &false);
+
+        // Clear migration target on init
+        env.storage().instance().remove(&DataKey::MigrationTarget);
+
+        // Initialize whitelisted tokens map
         let whitelist: Map<Address, bool> = Map::new(&env);
         env.storage().instance().set(&WhitelistDataKey::WhitelistedTokens, &whitelist);
 
@@ -139,6 +216,7 @@ impl VestingContract {
     }
 
     fn require_admin(env: &Env) {
+        Self::require_not_deprecated(env);
         let admin: Address = env
             .storage()
             .instance()
@@ -179,6 +257,7 @@ impl VestingContract {
     }
 
     pub fn accept_ownership(env: Env) {
+        Self::require_not_deprecated(&env);
         let proposed_admin: Address = env
             .storage()
             .instance()
@@ -189,6 +268,66 @@ impl VestingContract {
         env.storage().instance().remove(&DataKey::ProposedAdmin);
     }
 
+    // Emergency migration: freeze contract and transfer all whitelisted token balances to V2.
+    // Admin-only. Sets `is_deprecated = true`.
+    pub fn migrate_liquidity(env: Env, v2_contract_address: Address) -> Map<Address, i128> {
+        Self::require_admin(&env);
+
+        if v2_contract_address == env.current_contract_address() {
+            panic!("v2_contract_address must differ from current contract");
+        }
+
+        let already_deprecated: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::IsDeprecated)
+            .unwrap_or(false);
+        if already_deprecated {
+            panic!("Contract is deprecated");
+        }
+
+        // Freeze the contract immediately.
+        env.storage().instance().set(&DataKey::IsDeprecated, &true);
+        env.storage().instance().set(&DataKey::IsPaused, &true);
+        env.storage()
+            .instance()
+            .set(&DataKey::MigrationTarget, &v2_contract_address);
+
+        let whitelist: Map<Address, bool> = env
+            .storage()
+            .instance()
+            .get(&WhitelistDataKey::WhitelistedTokens)
+            .unwrap_or(Map::new(&env));
+
+        let mut migrated: Map<Address, i128> = Map::new(&env);
+        for (token_address, allowed) in whitelist.iter() {
+            if !allowed {
+                continue;
+            }
+            let token_client = token::Client::new(&env, &token_address);
+            let balance: i128 = token_client.balance(&env.current_contract_address());
+            if balance > 0 {
+                token_client.transfer(
+                    &env.current_contract_address(),
+                    &v2_contract_address,
+                    &balance,
+                );
+            }
+
+            migrated.set(token_address.clone(), balance);
+            env.events().publish(
+                (Symbol::new(&env, "LiquidityMigrated"), token_address),
+                (v2_contract_address.clone(), balance),
+            );
+        }
+
+        env.events()
+            .publish(Symbol::new(&env, "ContractDeprecated"), v2_contract_address);
+
+        migrated
+    }
+
+    // Get current admin address
     pub fn get_admin(env: Env) -> Address {
         env.storage().instance().get(&DataKey::AdminAddress).unwrap_or_else(|| panic!("Admin not set"))
     }
@@ -309,6 +448,15 @@ impl VestingContract {
     }
 
     fn initialize_vault_metadata(env: &Env, vault_id: u64) -> bool {
+        if env.storage().instance().get(&DataKey::IsDeprecated).unwrap_or(false) {
+            return false;
+        }
+
+        let vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
         let vault: Vault = env.storage().instance().get(&DataKey::VaultData(vault_id)).unwrap_or_else(|| panic!("Vault not found"));
 
         if !vault.is_initialized {
@@ -442,6 +590,12 @@ impl VestingContract {
     }
 
     pub fn set_delegate(env: Env, vault_id: u64, delegate: Option<Address>) {
+        Self::require_not_deprecated(&env);
+        let mut vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
         let mut vault: Vault = env.storage().instance().get(&DataKey::VaultData(vault_id)).unwrap_or_else(|| panic!("Vault not found"));
 
         if !vault.is_initialized { panic!("Vault not initialized"); }
@@ -661,6 +815,11 @@ impl VestingContract {
     }
 
     pub fn get_vault(env: Env, vault_id: u64) -> Vault {
+        let vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
         let vault: Vault = env.storage().instance().get(&DataKey::VaultData(vault_id)).unwrap_or_else(|| panic!("Vault not found"));
 
         if !vault.is_initialized {
@@ -675,6 +834,11 @@ impl VestingContract {
         let vault_ids: Vec<u64> = env.storage().instance().get(&DataKey::UserVaults(user.clone())).unwrap_or(Vec::new(&env));
 
         for vault_id in vault_ids.iter() {
+            let vault: Vault = env
+                .storage()
+                .instance()
+                .get(&DataKey::VaultData(vault_id))
+                .unwrap_or_else(|| panic!("Vault not found"));
             let vault: Vault = env.storage().instance().get(&DataKey::VaultData(vault_id)).unwrap_or_else(|| panic!("Vault not found"));
 
             if !vault.is_initialized {
@@ -702,6 +866,26 @@ impl VestingContract {
         admin_balance += unreleased_amount;
         env.storage().instance().set(&DataKey::AdminBalance, &admin_balance);
 
+        unreleased_amount
+    }
+
+    // Admin-only: Revoke tokens from a vault and return them to admin
+    pub fn revoke_tokens(env: Env, vault_id: u64) -> i128 {
+        Self::require_admin(&env);
+
+        let returned = Self::internal_revoke_full(&env, vault_id);
+
+        // Single admin balance update for this call
+        let mut admin_balance: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::AdminBalance)
+            .unwrap_or(0);
+        admin_balance += returned;
+        env.storage()
+            .instance()
+            .set(&DataKey::AdminBalance, &admin_balance);
+        returned
         let mut total_shares: i128 = env.storage().instance().get(&DataKey::TotalShares).unwrap_or(0);
         total_shares -= unreleased_amount;
         env.storage().instance().set(&DataKey::TotalShares, &total_shares);
@@ -730,6 +914,30 @@ impl VestingContract {
         admin_balance += amount;
         env.storage().instance().set(&DataKey::AdminBalance, &admin_balance);
 
+        amount
+    }
+
+    // Admin-only: Revoke many vaults in a single call and credit the admin once.
+    pub fn batch_revoke(env: Env, vault_ids: Vec<u64>) -> i128 {
+        Self::require_admin(&env);
+
+        let mut total_returned: i128 = 0;
+        for id in vault_ids.iter() {
+            let returned = Self::internal_revoke_full(&env, id);
+            total_returned += returned;
+        }
+
+        // Single admin balance update for the whole batch
+        let mut admin_balance: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::AdminBalance)
+            .unwrap_or(0);
+        admin_balance += total_returned;
+        env.storage()
+            .instance()
+            .set(&DataKey::AdminBalance, &admin_balance);
+        total_returned
         let mut total_shares: i128 = env.storage().instance().get(&DataKey::TotalShares).unwrap_or(0);
         total_shares -= amount;
         env.storage().instance().set(&DataKey::TotalShares, &total_shares);
@@ -834,6 +1042,12 @@ impl VestingContract {
     }
 
     pub fn stake_tokens(env: Env, vault_id: u64, amount: i128, validator: Address) {
+        Self::require_not_deprecated(&env);
+        let mut vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
         let mut vault: Vault = env.storage().instance().get(&DataKey::VaultData(vault_id)).unwrap_or_else(|| panic!("Vault not found"));
 
         if !vault.is_initialized { panic!("Vault not initialized"); }
@@ -903,6 +1117,11 @@ impl VestingContract {
     }
 
     pub fn get_claimable_amount(env: Env, vault_id: u64) -> i128 {
+        let vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
         let vault: Vault = env.storage().instance().get(&DataKey::VaultData(vault_id)).unwrap_or_else(|| panic!("Vault not found"));
 
         let vested = Self::calculate_time_vested_amount(&env, &vault);
@@ -915,6 +1134,15 @@ impl VestingContract {
     }
 
     pub fn auto_claim(env: Env, vault_id: u64, keeper: Address) {
+        if Self::is_paused(env.clone()) {
+            panic!("Contract is paused - all withdrawals are disabled");
+        }
+
+        let mut vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
         let mut vault: Vault = env.storage().instance().get(&DataKey::VaultData(vault_id)).unwrap_or_else(|| panic!("Vault not found"));
 
         if !vault.is_initialized { panic!("Vault not initialized"); }
@@ -949,6 +1177,9 @@ impl VestingContract {
         };
 
         vault.released_amount += claimable;
+        env.storage()
+            .instance()
+            .set(&DataKey::VaultData(vault_id), &vault);
         let mut updated_total_shares = total_shares;
         updated_total_shares -= claimable;
         env.storage().instance().set(&DataKey::TotalShares, &updated_total_shares);
