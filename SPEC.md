@@ -351,6 +351,18 @@ Lazy vaults have their `USER_VAULTS` index populated on first access via `initia
 #### `check_invariant() → bool`
 - Returns whether `total_locked + total_claimed + admin_balance == initial_supply`.
 
+#### `migrate_liquidity(v2_contract_address) → Map<Address, i128>`
+- Admin-only emergency migration to a V2 architecture.
+- Sets a global `is_deprecated = true` flag and pauses the contract.
+- Transfers all balances of **whitelisted tokens** held by the contract address to `v2_contract_address`.
+- Returns a map of `token_address → migrated_amount`.
+
+#### `is_deprecated() → bool`
+- Pure read — returns whether the contract is deprecated (frozen).
+
+#### `get_migration_target() → Option<Address>`
+- Pure read — returns the V2 contract address if migration has been executed.
+
 ---
 
 ## Security Model
