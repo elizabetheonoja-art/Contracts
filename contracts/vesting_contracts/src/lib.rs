@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Map, Symbol, Vec};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Map, Symbol, Vec, String};
 
 // DataKey for whitelisted tokens
 #[contracttype]
@@ -26,6 +26,7 @@ pub struct Vault {
     pub start_time: u64,
     pub end_time: u64,
     pub keeper_fee: i128, // Fee paid to anyone who triggers auto_claim
+        pub title: String, // Short human-readable title (max 32 chars)
     pub is_initialized: bool, // Lazy initialization flag
     pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
     pub creation_time: u64, // Timestamp of creation for clawback grace period
@@ -68,6 +69,7 @@ pub struct VaultCreated {
     pub total_amount: i128,
     pub cliff_duration: u64,
     pub start_time: u64,
+    pub title: String,
 }
 
 #[contractimpl]
@@ -234,6 +236,7 @@ impl VestingContract {
             start_time,
             end_time,
             keeper_fee,
+            title: String::from_slice(&env, ""),
             is_initialized: true,
             is_irrevocable: !is_revocable,
             creation_time: now,
@@ -271,6 +274,7 @@ impl VestingContract {
             total_amount: amount,
             cliff_duration,
             start_time,
+            title: String::from_slice(&env, ""),
         };
         env.events().publish(
             (Symbol::new(&env, "VaultCreated"), vault_count),
@@ -315,6 +319,7 @@ impl VestingContract {
             start_time,
             end_time,
             keeper_fee,
+            title: String::from_slice(&env, ""),
             is_initialized: false, // Mark as lazy initialized
             is_irrevocable: !is_revocable, // Convert from is_revocable parameter
             creation_time: now,
@@ -343,6 +348,7 @@ impl VestingContract {
             total_amount: amount,
             cliff_duration,
             start_time,
+            title: String::from_slice(&env, ""),
         };
         env.events().publish(
             (Symbol::new(&env, "VaultCreated"), vault_count),
@@ -698,6 +704,25 @@ impl VestingContract {
         );
     }
 
+    // Admin-only: set a short title for a vault (max 32 bytes)
+    pub fn set_vault_title(env: Env, vault_id: u64, title: String) {
+        Self::require_admin(&env);
+
+        // Enforce max length (32 bytes)
+        if title.len() > 32 {
+            panic!("Title too long");
+        }
+
+        let mut vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
+
+        vault.title = title;
+        env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
+    }
+
     // Batch create vaults with lazy initialization
     pub fn batch_create_vaults_lazy(env: Env, batch_data: BatchCreateData) -> Vec<u64> {
         Self::require_admin(&env);
@@ -737,6 +762,7 @@ impl VestingContract {
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
+                title: String::from_slice(&env, ""),
                 is_initialized: false, // Lazy initialization
                 is_irrevocable: false, // Default to revocable for batch operations
                 creation_time: now,
@@ -759,6 +785,7 @@ impl VestingContract {
                 total_amount: vault.total_amount,
                 cliff_duration,
                 start_time,
+                title: String::from_slice(&env, ""),
             };
             env.events()
                 .publish((Symbol::new(&env, "VaultCreated"), vault_id), vault_created);
@@ -812,6 +839,7 @@ impl VestingContract {
                 start_time: batch_data.start_times.get(i).unwrap(),
                 end_time: batch_data.end_times.get(i).unwrap(),
                 keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
+                title: String::from_slice(&env, ""),
                 is_initialized: true,
                 is_irrevocable: false, // Default to revocable for batch operations
                 creation_time: now,
@@ -846,6 +874,7 @@ impl VestingContract {
                 total_amount: vault.total_amount,
                 cliff_duration,
                 start_time,
+                title: String::from_slice(&env, ""),
             };
             env.events()
                 .publish((Symbol::new(&env, "VaultCreated"), vault_id), vault_created);
