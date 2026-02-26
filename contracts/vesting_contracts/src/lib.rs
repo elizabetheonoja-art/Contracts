@@ -1926,4 +1926,6 @@ impl VestingContract {
     }
 }
 
-mod test;
+// Unit tests for this contract are kept as integration tests under
+// `contracts/vesting_contracts/tests/` to avoid `no_std` test-harness friction.
+// mod test;
