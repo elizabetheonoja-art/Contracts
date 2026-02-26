@@ -108,7 +108,7 @@ fn auth_entry_for_multisig(
 ) -> xdr::SorobanAuthorizationEntry {
     let root_invocation = xdr::SorobanAuthorizedInvocation {
         function: xdr::SorobanAuthorizedFunction::ContractFn(xdr::InvokeContractArgs {
-            contract_address: xdr::ScAddress::Contract(contract.contract_id()),
+            contract_address: contract.clone().try_into().unwrap(),
             function_name: fn_name.try_into().unwrap(),
             args: args.try_into().unwrap(),
         }),
