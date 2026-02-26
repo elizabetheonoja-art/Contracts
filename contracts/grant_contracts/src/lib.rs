@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, Map, Symbol, Vec, U256};
+use soroban_sdk::{contract, contractimpl, symbol_short, Address, Env, Symbol, U256};
 
 #[contract]
 pub struct GrantContract;
@@ -32,8 +32,9 @@ impl GrantContract {
         env.storage().instance().set(&START_TIME, &start_time);
         env.storage().instance().set(&END_TIME, &end_time);
         env.storage().instance().set(&RECIPIENT, &recipient);
-        env.storage().instance().set(&CLAIMED, &U256::from_u64(0));
-
+        env.storage()
+            .instance()
+            .set(&CLAIMED, &U256::from_u32(&env, 0));
         end_time
     }
 
@@ -45,15 +46,14 @@ impl GrantContract {
             .storage()
             .instance()
             .get(&TOTAL_AMOUNT)
-            .unwrap_or(U256::from_u64(0));
+            .unwrap_or(U256::from_u32(&env, 0));
         let claimed = env
             .storage()
             .instance()
             .get(&CLAIMED)
-            .unwrap_or(U256::from_u64(0));
-
+            .unwrap_or(U256::from_u32(&env, 0));
         if current_time <= start_time {
-            return U256::from_u64(0);
+            return U256::from_u32(&env, 0);
         }
 
         let elapsed = if current_time >= end_time {
@@ -64,15 +64,17 @@ impl GrantContract {
 
         let total_duration = end_time - start_time;
         let vested = if total_duration > 0 {
-            total_amount * U256::from_u64(elapsed) / U256::from_u64(total_duration)
+            let elapsed_u256 = U256::from_u32(&env, elapsed as u32);
+            let duration_u256 = U256::from_u32(&env, total_duration as u32);
+            total_amount.mul(&elapsed_u256).div(&duration_u256)
         } else {
-            U256::from_u64(0)
+            U256::from_u32(&env, 0)
         };
 
         if vested > claimed {
-            vested - claimed
+            vested.sub(&claimed)
         } else {
-            U256::from_u64(0)
+            U256::from_u32(&env, 0)
         }
     }
 
@@ -83,14 +85,14 @@ impl GrantContract {
         assert_eq!(recipient, stored_recipient, "Unauthorized recipient");
 
         let claimable = Self::claimable_balance(env.clone());
-        assert!(claimable > U256::from_u64(0), "No tokens to claim");
+        assert!(claimable > U256::from_u32(&env, 0), "No tokens to claim");
 
         let claimed = env
             .storage()
             .instance()
             .get(&CLAIMED)
-            .unwrap_or(U256::from_u64(0));
-        let new_claimed = claimed + claimable;
+            .unwrap_or(U256::from_u32(&env, 0));
+        let new_claimed = claimed.add(&claimable);
         env.storage().instance().set(&CLAIMED, &new_claimed);
 
         claimable
@@ -101,15 +103,14 @@ impl GrantContract {
             .storage()
             .instance()
             .get(&TOTAL_AMOUNT)
-            .unwrap_or(U256::from_u64(0));
+            .unwrap_or(U256::from_u32(&env, 0));
         let start_time = env.storage().instance().get(&START_TIME).unwrap_or(0);
         let end_time = env.storage().instance().get(&END_TIME).unwrap_or(0);
         let claimed = env
             .storage()
             .instance()
             .get(&CLAIMED)
-            .unwrap_or(U256::from_u64(0));
-
+            .unwrap_or(U256::from_u32(&env, 0));
         (total_amount, start_time, end_time, claimed)
     }
 }

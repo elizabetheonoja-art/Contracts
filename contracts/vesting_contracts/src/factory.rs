@@ -1,4 +1,6 @@
-use soroban_sdk::{contract, contractimpl, contractmeta, contracttype, Map, Address, BytesN, Env, Vec};
+use soroban_sdk::{
+    contract, contractimpl, contractmeta, contracttype, Address, BytesN, Env, Map, Vec,
+};
 
 // Contract metadata for the factory
 contractmeta!(
@@ -31,7 +33,12 @@ impl VestingFactory {
 
     /// Deploy a new vesting contract for an organization
     /// Only allows deployment if token is whitelisted
-    pub fn deploy_new_vault_contract(env: Env, admin: Address, initial_supply: i128, token: Address) -> Address {
+    pub fn deploy_new_vault_contract(
+        env: Env,
+        admin: Address,
+        initial_supply: i128,
+        token: Address,
+    ) -> Address {
         let _wasm_hash: BytesN<32> = env
             .storage()
             .instance()
@@ -39,7 +46,11 @@ impl VestingFactory {
             .unwrap_or_else(|| panic!("Factory not initialized - WASM hash not set"));
 
         // Check token whitelist
-        let whitelist: Map<Address, bool> = env.storage().instance().get(&crate::WhitelistDataKey::WhitelistedTokens).unwrap_or(Map::new(&env));
+        let whitelist: Map<Address, bool> = env
+            .storage()
+            .instance()
+            .get(&crate::WhitelistDataKey::WhitelistedTokens)
+            .unwrap_or(Map::new(&env));
         if !whitelist.get(token.clone()).unwrap_or(false) {
             panic!("Token not whitelisted");
         }
