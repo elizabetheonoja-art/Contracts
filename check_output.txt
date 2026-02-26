@@ -1,0 +1,2473 @@
+    Checking vesting_contracts v0.0.0 (/home/lawless-pad/Documents/drips/Contracts/contracts/vesting_contracts)
+error[E0609]: no field `is_transferable` on type `BatchCreateData`
+   --> contracts/vesting_contracts/src/lib.rs:822:46
+    |
+822 |             let is_transferable = batch_data.is_transferable.get(i).unwrap_or(false);
+    |                                              ^^^^^^^^^^^^^^^ unknown field
+    |
+    = note: available fields are: `recipients`, `amounts`, `start_times`, `end_times`, `keeper_fees`, `step_durations`
+
+error[E0609]: no field `is_irrevocable` on type `BatchCreateData`
+   --> contracts/vesting_contracts/src/lib.rs:823:45
+    |
+823 |             let is_irrevocable = batch_data.is_irrevocable.get(i).unwrap_or(false);
+    |                                             ^^^^^^^^^^^^^^ unknown field
+    |
+    = note: available fields are: `recipients`, `amounts`, `start_times`, `end_times`, `keeper_fees`, `step_durations`
+
+error[E0063]: missing field `title` in initializer of `Vault`
+   --> contracts/vesting_contracts/src/lib.rs:878:25
+    |
+878 |             let vault = Vault {
+    |                         ^^^^^ missing `title`
+
+error[E0277]: the type `UnsafeCell<Generators>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<Generators>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `RefCell<Generators>`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<Generators>`
+note: required because it appears within the type `RefCell<Generators>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+    = note: required for `Rc<RefCell<Generators>>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_sdk::env::EnvTestState`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:256:8
+    |
+256 | struct EnvTestState {
+    |        ^^^^^^^^^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<AuthSnapshot>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<AuthSnapshot>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `RefCell<AuthSnapshot>`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<AuthSnapshot>`
+note: required because it appears within the type `RefCell<AuthSnapshot>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+    = note: required for `Rc<RefCell<AuthSnapshot>>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_sdk::env::EnvTestState`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:256:8
+    |
+256 | struct EnvTestState {
+    |        ^^^^^^^^^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<core::option::Option<soroban_env_host::vm::module_cache::ModuleCache>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<core::option::Option<soroban_env_host::vm::module_cache::ModuleCache>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<core::option::Option<soroban_env_host::vm::module_cache::ModuleCache>>`
+note: required because it appears within the type `RefCell<core::option::Option<soroban_env_host::vm::module_cache::ModuleCache>>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<core::option::Option<soroban_sdk::xdr::AccountId>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<core::option::Option<soroban_sdk::xdr::AccountId>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<core::option::Option<soroban_sdk::xdr::AccountId>>`
+note: required because it appears within the type `RefCell<core::option::Option<soroban_sdk::xdr::AccountId>>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<core::option::Option<LedgerInfo>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<core::option::Option<LedgerInfo>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<core::option::Option<LedgerInfo>>`
+note: required because it appears within the type `RefCell<core::option::Option<LedgerInfo>>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<Vec<HostObject>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<Vec<HostObject>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<Vec<HostObject>>`
+note: required because it appears within the type `RefCell<Vec<HostObject>>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: the full name for the type has been written to '/home/lawless-pad/Documents/drips/Contracts/target/debug/deps/vesting_contracts-5ca6d66fdc9c5413.long-type-14805213410825449259.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::storage::Storage>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<soroban_env_host::storage::Storage>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::storage::Storage>`
+note: required because it appears within the type `RefCell<soroban_env_host::storage::Storage>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<Vec<Context>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<Vec<Context>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<Vec<Context>>`
+note: required because it appears within the type `RefCell<Vec<Context>>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: the full name for the type has been written to '/home/lawless-pad/Documents/drips/Contracts/target/debug/deps/vesting_contracts-5ca6d66fdc9c5413.long-type-4061034741271921508.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::events::internal::InternalEventsBuffer>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<soroban_env_host::events::internal::InternalEventsBuffer>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::events::internal::InternalEventsBuffer>`
+note: required because it appears within the type `RefCell<soroban_env_host::events::internal::InternalEventsBuffer>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::auth::AuthorizationManager>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<soroban_env_host::auth::AuthorizationManager>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::auth::AuthorizationManager>`
+note: required because it appears within the type `RefCell<soroban_env_host::auth::AuthorizationManager>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::events::diagnostic::DiagnosticLevel>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<soroban_env_host::events::diagnostic::DiagnosticLevel>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::events::diagnostic::DiagnosticLevel>`
+note: required because it appears within the type `RefCell<soroban_env_host::events::diagnostic::DiagnosticLevel>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<core::option::Option<soroban_env_host::host::prng::Prng>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<core::option::Option<soroban_env_host::host::prng::Prng>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<core::option::Option<soroban_env_host::host::prng::Prng>>`
+note: required because it appears within the type `RefCell<core::option::Option<soroban_env_host::host::prng::Prng>>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<bool>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<bool>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<bool>`
+note: required because it appears within the type `RefCell<bool>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<core::option::Option<rand_chacha::chacha::ChaCha20Rng>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<core::option::Option<rand_chacha::chacha::ChaCha20Rng>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<core::option::Option<rand_chacha::chacha::ChaCha20Rng>>`
+note: required because it appears within the type `RefCell<core::option::Option<rand_chacha::chacha::ChaCha20Rng>>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<BTreeMap<ContractId, Rc<dyn ContractFunctionSet>>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<BTreeMap<ContractId, Rc<dyn ContractFunctionSet>>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<BTreeMap<ContractId, Rc<dyn ContractFunctionSet>>>`
+note: required because it appears within the type `RefCell<BTreeMap<ContractId, Rc<dyn ContractFunctionSet>>>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: the full name for the type has been written to '/home/lawless-pad/Documents/drips/Contracts/target/debug/deps/vesting_contracts-5ca6d66fdc9c5413.long-type-8924523334152996170.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<core::option::Option<soroban_env_host::auth::AuthorizationManager>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<core::option::Option<soroban_env_host::auth::AuthorizationManager>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<core::option::Option<soroban_env_host::auth::AuthorizationManager>>`
+note: required because it appears within the type `RefCell<core::option::Option<soroban_env_host::auth::AuthorizationManager>>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<Option<Rc<dyn Fn(&Host, TraceEvent<'a>) -> ...>>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<Option<Rc<dyn Fn(&Host, TraceEvent<'a>) -> ...>>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<Option<Rc<dyn Fn(&Host, TraceEvent<'a>) -> ...>>>`
+note: required because it appears within the type `RefCell<Option<Rc<dyn Fn(&Host, TraceEvent<'a>) -> Result<(), ...>>>>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: the full name for the type has been written to '/home/lawless-pad/Documents/drips/Contracts/target/debug/deps/vesting_contracts-5ca6d66fdc9c5413.long-type-17093873343705349414.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<Option<Rc<dyn Fn(&Host, ContractInvocationEvent)>>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<Option<Rc<dyn Fn(&Host, ContractInvocationEvent)>>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<Option<Rc<dyn Fn(&Host, ContractInvocationEvent)>>>`
+note: required because it appears within the type `RefCell<Option<Rc<dyn Fn(&Host, ContractInvocationEvent)>>>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: the full name for the type has been written to '/home/lawless-pad/Documents/drips/Contracts/target/debug/deps/vesting_contracts-5ca6d66fdc9c5413.long-type-12551935209922433117.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::host::CoverageScoreboard>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<soroban_env_host::host::CoverageScoreboard>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::host::CoverageScoreboard>`
+note: required because it appears within the type `RefCell<soroban_env_host::host::CoverageScoreboard>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::host::invocation_metering::InvocationMeter>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<soroban_env_host::host::invocation_metering::InvocationMeter>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::host::invocation_metering::InvocationMeter>`
+note: required because it appears within the type `RefCell<soroban_env_host::host::invocation_metering::InvocationMeter>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+    |
+91  | struct HostImpl {
+    |        ^^^^^^^^
+    = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+    |
+175 | pub struct Host(Rc<HostImpl>);
+    |            ^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<isize>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |           let result = std::panic::catch_unwind(|| {
+    |  ______________________------------------------_^
+    | |                      |
+    | |                      required by a bound introduced by this call
+109 | |             client.create_vault_full(
+110 | |                 &beneficiary,
+111 | |                 &1_000i128,
+...   |
+118 | |             );
+119 | |         });
+    | |_________^ `UnsafeCell<isize>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    |
+    = help: within `RefCell<Generators>`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<isize>`
+note: required because it appears within the type `Cell<isize>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:311:12
+    |
+311 | pub struct Cell<T: ?Sized> {
+    |            ^^^^
+note: required because it appears within the type `RefCell<Generators>`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+    |
+721 | pub struct RefCell<T: ?Sized> {
+    |            ^^^^^^^
+    = note: required for `Rc<RefCell<Generators>>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_sdk::env::EnvTestState`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:256:8
+    |
+256 | struct EnvTestState {
+    |        ^^^^^^^^^^^^
+note: required because it appears within the type `Env`
+   --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+    |
+222 | pub struct Env {
+    |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+   --> contracts/vesting_contracts/src/lib.rs:32:1
+    |
+32  | #[contract]
+    | ^^^^^^^^^^^
+    = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+   --> contracts/vesting_contracts/src/test.rs:108:47
+    |
+108 |         let result = std::panic::catch_unwind(|| {
+    |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+   --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+    |
+358 | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+    |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+    = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::budget::BudgetImpl>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:108:47
+     |
+108  |           let result = std::panic::catch_unwind(|| {
+     |  ______________________------------------------_^
+     | |                      |
+     | |                      required by a bound introduced by this call
+109  | |             client.create_vault_full(
+110  | |                 &beneficiary,
+111  | |                 &1_000i128,
+...    |
+118  | |             );
+119  | |         });
+     | |_________^ `UnsafeCell<soroban_env_host::budget::BudgetImpl>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `RefCell<soroban_env_host::budget::BudgetImpl>`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::budget::BudgetImpl>`
+note: required because it appears within the type `RefCell<soroban_env_host::budget::BudgetImpl>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+     = note: required for `Rc<RefCell<soroban_env_host::budget::BudgetImpl>>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::budget::Budget`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/budget.rs:1201:12
+     |
+1201 | pub struct Budget(pub(crate) Rc<RefCell<BudgetImpl>>);
+     |            ^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:108:47
+     |
+108  |         let result = std::panic::catch_unwind(|| {
+     |                                               ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated method `soroban_sdk::events::Events::publish`: use the #[contractevent] macro on a contract event type
+   --> contracts/vesting_contracts/src/test.rs:602:22
+    |
+602 |         env.events().publish((Symbol::new(&env, "stake"), vault_id), amount);
+    |                      ^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated method `soroban_sdk::events::Events::publish`: use the #[contractevent] macro on a contract event type
+   --> contracts/vesting_contracts/src/test.rs:607:14
+    |
+607 |             .publish((Symbol::new(&env, "unstake"), vault_id), amount);
+    |              ^^^^^^^
+
+error[E0599]: no method named `create_vault` found for struct `VestingContractClient` in the current scope
+    --> contracts/vesting_contracts/src/test.rs:1095:27
+     |
+1095 |     let vault_id = client.create_vault(
+     |                    -------^^^^^^^^^^^^
+     |
+    ::: contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ----------- method `create_vault` not found for this struct
+     |
+help: there is a method `create_vault_full` with a similar name
+     |
+1095 |     let vault_id = client.create_vault_full(
+     |                                       +++++
+
+error[E0609]: no field `cliff_duration` on type `Vault`
+    --> contracts/vesting_contracts/src/test.rs:1109:41
+     |
+1109 |     let original_cliff_duration = vault.cliff_duration;
+     |                                         ^^^^^^^^^^^^^^ unknown field
+     |
+     = note: available fields are: `total_amount`, `released_amount`, `keeper_fee`, `staked_amount`, `owner` ... and 10 others
+
+error[E0609]: no field `cliff_duration` on type `Vault`
+    --> contracts/vesting_contracts/src/test.rs:1118:30
+     |
+1118 |     assert_eq!(updated_vault.cliff_duration, original_cliff_duration);
+     |                              ^^^^^^^^^^^^^^ unknown field
+     |
+     = note: available fields are: `total_amount`, `released_amount`, `keeper_fee`, `staked_amount`, `owner` ... and 10 others
+
+error[E0277]: the type `UnsafeCell<Generators>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<Generators>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `RefCell<Generators>`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<Generators>`
+note: required because it appears within the type `RefCell<Generators>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+     = note: required for `Rc<RefCell<Generators>>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_sdk::env::EnvTestState`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:256:8
+     |
+256  | struct EnvTestState {
+     |        ^^^^^^^^^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<AuthSnapshot>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<AuthSnapshot>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `RefCell<AuthSnapshot>`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<AuthSnapshot>`
+note: required because it appears within the type `RefCell<AuthSnapshot>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+     = note: required for `Rc<RefCell<AuthSnapshot>>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_sdk::env::EnvTestState`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:256:8
+     |
+256  | struct EnvTestState {
+     |        ^^^^^^^^^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<core::option::Option<soroban_env_host::vm::module_cache::ModuleCache>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<core::option::Option<soroban_env_host::vm::module_cache::ModuleCache>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<core::option::Option<soroban_env_host::vm::module_cache::ModuleCache>>`
+note: required because it appears within the type `RefCell<core::option::Option<soroban_env_host::vm::module_cache::ModuleCache>>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<core::option::Option<soroban_sdk::xdr::AccountId>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<core::option::Option<soroban_sdk::xdr::AccountId>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<core::option::Option<soroban_sdk::xdr::AccountId>>`
+note: required because it appears within the type `RefCell<core::option::Option<soroban_sdk::xdr::AccountId>>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<core::option::Option<LedgerInfo>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<core::option::Option<LedgerInfo>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<core::option::Option<LedgerInfo>>`
+note: required because it appears within the type `RefCell<core::option::Option<LedgerInfo>>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<Vec<HostObject>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<Vec<HostObject>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<Vec<HostObject>>`
+note: required because it appears within the type `RefCell<Vec<HostObject>>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: the full name for the type has been written to '/home/lawless-pad/Documents/drips/Contracts/target/debug/deps/vesting_contracts-5ca6d66fdc9c5413.long-type-14805213410825449259.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::storage::Storage>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<soroban_env_host::storage::Storage>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::storage::Storage>`
+note: required because it appears within the type `RefCell<soroban_env_host::storage::Storage>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<Vec<Context>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<Vec<Context>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<Vec<Context>>`
+note: required because it appears within the type `RefCell<Vec<Context>>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: the full name for the type has been written to '/home/lawless-pad/Documents/drips/Contracts/target/debug/deps/vesting_contracts-5ca6d66fdc9c5413.long-type-4061034741271921508.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::events::internal::InternalEventsBuffer>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<soroban_env_host::events::internal::InternalEventsBuffer>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::events::internal::InternalEventsBuffer>`
+note: required because it appears within the type `RefCell<soroban_env_host::events::internal::InternalEventsBuffer>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::auth::AuthorizationManager>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<soroban_env_host::auth::AuthorizationManager>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::auth::AuthorizationManager>`
+note: required because it appears within the type `RefCell<soroban_env_host::auth::AuthorizationManager>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::events::diagnostic::DiagnosticLevel>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<soroban_env_host::events::diagnostic::DiagnosticLevel>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::events::diagnostic::DiagnosticLevel>`
+note: required because it appears within the type `RefCell<soroban_env_host::events::diagnostic::DiagnosticLevel>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<core::option::Option<soroban_env_host::host::prng::Prng>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<core::option::Option<soroban_env_host::host::prng::Prng>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<core::option::Option<soroban_env_host::host::prng::Prng>>`
+note: required because it appears within the type `RefCell<core::option::Option<soroban_env_host::host::prng::Prng>>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<bool>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<bool>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<bool>`
+note: required because it appears within the type `RefCell<bool>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<core::option::Option<rand_chacha::chacha::ChaCha20Rng>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<core::option::Option<rand_chacha::chacha::ChaCha20Rng>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<core::option::Option<rand_chacha::chacha::ChaCha20Rng>>`
+note: required because it appears within the type `RefCell<core::option::Option<rand_chacha::chacha::ChaCha20Rng>>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<BTreeMap<ContractId, Rc<dyn ContractFunctionSet>>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<BTreeMap<ContractId, Rc<dyn ContractFunctionSet>>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<BTreeMap<ContractId, Rc<dyn ContractFunctionSet>>>`
+note: required because it appears within the type `RefCell<BTreeMap<ContractId, Rc<dyn ContractFunctionSet>>>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: the full name for the type has been written to '/home/lawless-pad/Documents/drips/Contracts/target/debug/deps/vesting_contracts-5ca6d66fdc9c5413.long-type-8924523334152996170.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<core::option::Option<soroban_env_host::auth::AuthorizationManager>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<core::option::Option<soroban_env_host::auth::AuthorizationManager>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<core::option::Option<soroban_env_host::auth::AuthorizationManager>>`
+note: required because it appears within the type `RefCell<core::option::Option<soroban_env_host::auth::AuthorizationManager>>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<Option<Rc<dyn Fn(&Host, TraceEvent<'a>) -> ...>>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<Option<Rc<dyn Fn(&Host, TraceEvent<'a>) -> ...>>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<Option<Rc<dyn Fn(&Host, TraceEvent<'a>) -> ...>>>`
+note: required because it appears within the type `RefCell<Option<Rc<dyn Fn(&Host, TraceEvent<'a>) -> Result<(), ...>>>>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: the full name for the type has been written to '/home/lawless-pad/Documents/drips/Contracts/target/debug/deps/vesting_contracts-5ca6d66fdc9c5413.long-type-17093873343705349414.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<Option<Rc<dyn Fn(&Host, ContractInvocationEvent)>>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<Option<Rc<dyn Fn(&Host, ContractInvocationEvent)>>>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<Option<Rc<dyn Fn(&Host, ContractInvocationEvent)>>>`
+note: required because it appears within the type `RefCell<Option<Rc<dyn Fn(&Host, ContractInvocationEvent)>>>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: the full name for the type has been written to '/home/lawless-pad/Documents/drips/Contracts/target/debug/deps/vesting_contracts-5ca6d66fdc9c5413.long-type-12551935209922433117.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::host::CoverageScoreboard>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<soroban_env_host::host::CoverageScoreboard>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::host::CoverageScoreboard>`
+note: required because it appears within the type `RefCell<soroban_env_host::host::CoverageScoreboard>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::host::invocation_metering::InvocationMeter>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<soroban_env_host::host::invocation_metering::InvocationMeter>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `soroban_env_host::host::HostImpl`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::host::invocation_metering::InvocationMeter>`
+note: required because it appears within the type `RefCell<soroban_env_host::host::invocation_metering::InvocationMeter>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<isize>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<isize>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `RefCell<Generators>`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<isize>`
+note: required because it appears within the type `Cell<isize>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:311:12
+     |
+311  | pub struct Cell<T: ?Sized> {
+     |            ^^^^
+note: required because it appears within the type `RefCell<Generators>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+     = note: required for `Rc<RefCell<Generators>>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_sdk::env::EnvTestState`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:256:8
+     |
+256  | struct EnvTestState {
+     |        ^^^^^^^^^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the type `UnsafeCell<soroban_env_host::budget::BudgetImpl>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |       let result = std::panic::catch_unwind(|| {
+     |  __________________------------------------_^
+     | |                  |
+     | |                  required by a bound introduced by this call
+1141 | |         client.toggle_pause();
+1142 | |     });
+     | |_____^ `UnsafeCell<soroban_env_host::budget::BudgetImpl>` may contain interior mutability and a reference may not be safely transferrable across a catch_unwind boundary
+     |
+     = help: within `RefCell<soroban_env_host::budget::BudgetImpl>`, the trait `RefUnwindSafe` is not implemented for `UnsafeCell<soroban_env_host::budget::BudgetImpl>`
+note: required because it appears within the type `RefCell<soroban_env_host::budget::BudgetImpl>`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cell.rs:721:12
+     |
+721  | pub struct RefCell<T: ?Sized> {
+     |            ^^^^^^^
+     = note: required for `Rc<RefCell<soroban_env_host::budget::BudgetImpl>>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::budget::Budget`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/budget.rs:1201:12
+     |
+1201 | pub struct Budget(pub(crate) Rc<RefCell<BudgetImpl>>);
+     |            ^^^^^^
+note: required because it appears within the type `soroban_env_host::host::HostImpl`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:91:8
+     |
+91   | struct HostImpl {
+     |        ^^^^^^^^
+     = note: required for `Rc<soroban_env_host::host::HostImpl>` to implement `RefUnwindSafe`
+note: required because it appears within the type `soroban_env_host::host::Host`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-25.0.1/src/host.rs:175:12
+     |
+175  | pub struct Host(Rc<HostImpl>);
+     |            ^^^^
+note: required because it appears within the type `Env`
+    --> /home/lawless-pad/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-sdk-25.1.1/src/env.rs:222:12
+     |
+222  | pub struct Env {
+     |            ^^^
+note: required because it appears within the type `VestingContractClient<'_>`
+    --> contracts/vesting_contracts/src/lib.rs:32:1
+     |
+32   | #[contract]
+     | ^^^^^^^^^^^
+     = note: required for `&VestingContractClient<'_>` to implement `UnwindSafe`
+note: required because it's used within this closure
+    --> contracts/vesting_contracts/src/test.rs:1140:43
+     |
+1140 |     let result = std::panic::catch_unwind(|| {
+     |                                           ^^
+note: required by a bound in `__vestingcontract_fn_set_registry::std::panic::catch_unwind`
+    --> /home/lawless-pad/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:358:40
+     |
+358  | pub fn catch_unwind<F: FnOnce() -> R + UnwindSafe, R>(f: F) -> Result<R> {
+     |                                        ^^^^^^^^^^ required by this bound in `catch_unwind`
+     = note: this error originates in the attribute macro `contract` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> contracts/vesting_contracts/src/lib.rs:695:13
+    |
+695 |         let mut vault: Vault = env.storage().instance().get(&DataKey::VaultData(vault_id)).unwrap_or_else(|| panic!("Vault not found"));
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unused variable: `vault`
+   --> contracts/vesting_contracts/src/lib.rs:920:13
+    |
+920 |         let vault: Vault = env
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_vault`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `vault`
+   --> contracts/vesting_contracts/src/lib.rs:939:17
+    |
+939 |             let vault: Vault = env
+    |                 ^^^^^ help: if this is intentional, prefix it with an underscore: `_vault`
+
+warning: unused variable: `vault`
+    --> contracts/vesting_contracts/src/lib.rs:1071:17
+     |
+1071 |         let mut vault: Vault = env
+     |                 ^^^^^ help: if this is intentional, prefix it with an underscore: `_vault`
+
+warning: variable does not need to be mutable
+    --> contracts/vesting_contracts/src/lib.rs:1071:13
+     |
+1071 |         let mut vault: Vault = env
+     |             ----^^^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: unused variable: `contract_id`
+   --> contracts/vesting_contracts/src/test.rs:237:19
+    |
+237 |         let (env, contract_id, client, admin, _token) = setup();
+    |                   ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_contract_id`
+
+warning: unused variable: `admin`
+   --> contracts/vesting_contracts/src/test.rs:237:40
+    |
+237 |         let (env, contract_id, client, admin, _token) = setup();
+    |                                        ^^^^^ help: if this is intentional, prefix it with an underscore: `_admin`
+
+warning: unused variable: `env`
+   --> contracts/vesting_contracts/src/test.rs:973:14
+    |
+973 |         let (env, _cid, client, _admin, token) = setup();
+    |              ^^^ help: if this is intentional, prefix it with an underscore: `_env`
+
+Some errors have detailed explanations: E0063, E0277, E0599, E0609.
+For more information about an error, try `rustc --explain E0063`.
+warning: `vesting_contracts` (lib test) generated 10 warnings
+error: could not compile `vesting_contracts` (lib test) due to 50 previous errors; 10 warnings emitted
