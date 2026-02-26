@@ -1616,4 +1616,4 @@ impl VestingContract {
     }
 }
 
-// // mod test; // Disabled - tests need refactoring
+mod test;
