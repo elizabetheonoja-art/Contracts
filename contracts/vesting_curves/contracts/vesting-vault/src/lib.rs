@@ -1,4 +1,3 @@
-
 #![no_std]
 
 use soroban_sdk::{
@@ -16,6 +15,9 @@ const CLAIMED: Symbol      = symbol_short!("CLAIMED");
 const START: Symbol        = symbol_short!("START");
 const DURATION: Symbol     = symbol_short!("DURATION");
 const CURVE: Symbol        = symbol_short!("CURVE");
+
+// 10 years in seconds (Issue #44)
+const MAX_DURATION: u64 = 315_360_000;
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -54,6 +56,7 @@ impl VestingVault {
 
         assert!(total_amount > 0, "total_amount must be positive");
         assert!(duration > 0, "duration must be positive");
+        assert!(duration <= MAX_DURATION, "duration exceeds MAX_DURATION");
 
         admin.require_auth();
 
@@ -98,12 +101,7 @@ impl VestingVault {
         }
 
         match curve {
-
-            VestingCurve::Linear => {
-
-                (total * elapsed as i128) / duration as i128
-            }
-
+            VestingCurve::Linear => (total * elapsed as i128) / duration as i128,
             VestingCurve::Exponential => {
                 let elapsed_u128  = elapsed as u128;
                 let duration_u128 = duration as u128;
