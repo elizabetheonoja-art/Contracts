@@ -1,11 +1,5 @@
 #![no_std]
 use soroban_sdk::{contract, contractimpl, contracttype, token, vec, Address, Env, IntoVal, Map, Symbol, Vec, String};
-use soroban_sdk::{
-    contract, contractimpl, contracttype, token, vec, Address, Env, IntoVal, Map, Symbol, Vec,
-    String,
-};
- #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, token, vec, Address, Env, IntoVal, Map, Symbol, Vec};
 
 // DataKey for whitelisted tokens
 #[contracttype]
@@ -21,12 +15,15 @@ pub enum DataKey {
     ProposedAdmin,
     VaultCount,
     VaultData(u64),
-    UserVaults(Address),
     VaultMilestones(u64),
+    UserVaults(Address),
     KeeperFees,
     IsPaused,
     IsDeprecated,
     MigrationTarget,
+    Token,        // yield-bearing token
+    TotalShares,  // remaining initial_deposit_shares
+    TotalStaked,
 }
 
 mod factory;
@@ -35,24 +32,14 @@ pub use factory::{VestingFactory, VestingFactoryClient};
 #[contract]
 pub struct VestingContract;
 
-// Vault structure with lazy initialization
-#[contracttype]
-pub enum DataKey {
-    AdminAddress,
-    AdminBalance,
-    InitialSupply,
-    ProposedAdmin,
-    VaultCount,
-    VaultData(u64),
-    VaultMilestones(u64),
-    UserVaults(Address),
-    IsPaused,
-    KeeperFees,
-    Token,        // yield-bearing token
-    TotalShares,  // remaining initial_deposit_shares
-    TotalStaked,
-}
-
+/// Vault structure with lazy initialization
+/// 
+/// Supports both linear and periodic vesting schedules:
+/// - Linear vesting (step_duration = 0): Tokens vest continuously over time
+/// - Periodic vesting (step_duration > 0): Tokens vest in discrete steps (e.g., monthly)
+/// 
+/// For periodic vesting, the calculation rounds down to the nearest completed step,
+/// ensuring users only receive tokens that have fully vested according to the step schedule.
 #[contracttype]
 #[derive(Clone)]
 // NOTE: `#[contracttype]` structs serialize by field order (tuple-style).
@@ -70,21 +57,19 @@ pub struct Vault {
     pub start_time: u64,
     pub end_time: u64,
     pub creation_time: u64, // Timestamp of creation for clawback grace period
-    pub step_duration: u64, // Duration of each vesting step in seconds (0 = linear)
+    /// Duration of each vesting step in seconds (0 = linear vesting)
+    /// 
+    /// Common values:
+    /// - 0: Linear vesting (continuous)
+    /// - 2,592,000: Monthly (30 days)
+    /// - 7,776,000: Quarterly (90 days) 
+    /// - 31,536,000: Yearly (365 days)
+    pub step_duration: u64,
 
     pub is_initialized: bool, // Lazy initialization flag
     pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
     pub is_transferable: bool, // Can the beneficiary transfer this vault?
-    pub step_duration: u64, // Duration of each vesting step in seconds (0 = linear)
-    pub staked_amount: i128, // Amount currently staked in external contract
     pub is_frozen: bool, // Individual vault freeze flag for security investigations
-    pub keeper_fee: i128,
-    pub is_initialized: bool,
-    pub is_irrevocable: bool,
-    pub creation_time: u64,
-    pub is_transferable: bool,
-    pub step_duration: u64,
-    pub staked_amount: i128,
 }
 
 #[contracttype]
@@ -122,12 +107,6 @@ pub struct VaultCreated {
     pub cliff_duration: u64,
     pub start_time: u64,
 }
-
-mod factory;
-pub use factory::{VestingFactory, VestingFactoryClient};
-
-#[contract]
-pub struct VestingContract;
 
 #[contractimpl]
 #[allow(deprecated)]
@@ -181,15 +160,6 @@ impl VestingContract {
     pub fn initialize(env: Env, admin: Address, initial_supply: i128) {
         Self::require_not_deprecated(&env);
 
-        env.storage()
-            .instance()
-            .set(&DataKey::InitialSupply, &initial_supply);
-
-        env.storage()
-            .instance()
-            .set(&DataKey::AdminBalance, &initial_supply);
-
-    pub fn initialize(env: Env, admin: Address, initial_supply: i128) {
         env.storage().instance().set(&DataKey::InitialSupply, &initial_supply);
         env.storage().instance().set(&DataKey::AdminBalance, &initial_supply);
         env.storage().instance().set(&DataKey::AdminAddress, &admin);
@@ -583,38 +553,70 @@ impl VestingContract {
         }
     }
 
-    fn calculate_time_vested_amount(env: &Env, vault: &Vault) -> i128 {
+    /// Helper functions for common time durations in seconds
+/// These can be used when creating vaults with periodic vesting
+impl VestingContract {
+    /// Convert days to seconds
+    pub const fn seconds(days: u64) -> u64 { days * 86400 }
+    
+    /// 30 days in seconds (monthly vesting)
+    pub const fn monthly() -> u64 { 30 * 86400 } // 2,592,000 seconds
+    
+    /// 90 days in seconds (quarterly vesting)  
+    pub const fn quarterly() -> u64 { 3 * 30 * 86400 } // 7,776,000 seconds
+    
+    /// 365 days in seconds (yearly vesting)
+    pub const fn yearly() -> u64 { 365 * 86400 } // 31,536,000 seconds
+}
+
+/// Calculate the amount of tokens that have vested based on time
+/// 
+/// Supports two vesting modes:
+/// 1. Linear vesting (step_duration = 0): Continuous vesting over time
+/// 2. Periodic vesting (step_duration > 0): Discrete step vesting with rounding down
+/// 
+/// For periodic vesting, the formula is:
+/// vested = (elapsed / step_duration) * (total_amount / total_steps) * step_duration
+/// This rounds down to the nearest completed step, ensuring users only receive
+/// tokens that have fully vested according to the step schedule.
+/// 
+/// # Arguments
+/// * `env` - The contract environment
+/// * `vault` - The vault to calculate vesting for
+/// 
+/// # Returns
+/// The amount of tokens that have vested
+fn calculate_time_vested_amount(env: &Env, vault: &Vault) -> i128 {
         let now = env.ledger().timestamp();
         if now < vault.start_time { return 0; }
         if now >= vault.end_time { return vault.total_amount; }
+        
         let duration = vault.end_time - vault.start_time;
         if duration == 0 { return vault.total_amount; }
+        
         let elapsed = now - vault.start_time;
-        let _effective_elapsed = if vault.step_duration > 0 {
-            (elapsed / vault.step_duration) * vault.step_duration
-        } else {
-            elapsed
-        };
 
         if vault.step_duration > 0 {
-            // Periodic vesting: calculate vested = (elapsed / step_duration) * rate * step_duration
-            // Rate is total_amount / duration, so: vested = (elapsed / step_duration) * (total_amount / duration) * step_duration
-            // This simplifies to: vested = (elapsed / step_duration) * total_amount * step_duration / duration
-            let completed_steps = elapsed / vault.step_duration;
-            let rate_per_second = vault.total_amount / duration as i128;
-            let vested = completed_steps as i128 * rate_per_second * vault.step_duration as i128;
+            // Periodic vesting with monthly rounding
+            // First, round elapsed time down to the nearest step boundary
+            let rounded_elapsed = (elapsed / vault.step_duration) * vault.step_duration;
+            
+            // Calculate completed steps
+            let completed_steps = rounded_elapsed / vault.step_duration;
+            
+            // Calculate rate per step: total_amount / total_steps
+            let total_steps = duration / vault.step_duration;
+            if total_steps == 0 { return 0; }
+            
+            let amount_per_step = vault.total_amount / total_steps as i128;
+            let vested = completed_steps as i128 * amount_per_step;
             
             // Ensure we don't exceed total amount
-            if vested > vault.total_amount {
-                vault.total_amount
-            } else {
-                vested
-            }
+            vested.min(vault.total_amount)
         } else {
             // Linear vesting
             (vault.total_amount * elapsed as i128) / duration as i128
         }
-        (vault.total_amount * effective_elapsed as i128) / duration as i128
     }
 
     pub fn claim_tokens(env: Env, vault_id: u64, claim_amount: i128) -> i128 {
@@ -1009,6 +1011,7 @@ impl VestingContract {
         vault_ids
     }
 
+    // Admin-only: Revoke tokens from a vault and return them to admin
     pub fn revoke_tokens(env: Env, vault_id: u64) -> i128 {
         Self::require_admin(&env);
 
@@ -1026,26 +1029,6 @@ impl VestingContract {
         admin_balance += unreleased_amount;
         env.storage().instance().set(&DataKey::AdminBalance, &admin_balance);
 
-        unreleased_amount
-    }
-
-    // Admin-only: Revoke tokens from a vault and return them to admin
-    pub fn revoke_tokens(env: Env, vault_id: u64) -> i128 {
-        Self::require_admin(&env);
-
-        let returned = Self::internal_revoke_full(&env, vault_id);
-
-        // Single admin balance update for this call
-        let mut admin_balance: i128 = env
-            .storage()
-            .instance()
-            .get(&DataKey::AdminBalance)
-            .unwrap_or(0);
-        admin_balance += returned;
-        env.storage()
-            .instance()
-            .set(&DataKey::AdminBalance, &admin_balance);
-        returned
         let mut total_shares: i128 = env.storage().instance().get(&DataKey::TotalShares).unwrap_or(0);
         total_shares -= unreleased_amount;
         env.storage().instance().set(&DataKey::TotalShares, &total_shares);
@@ -1053,11 +1036,8 @@ impl VestingContract {
         let timestamp = env.ledger().timestamp();
         env.events().publish(
             (Symbol::new(&env, "TokensRevoked"), vault_id),
-            (returned, timestamp),
+            (unreleased_amount, timestamp),
         );
-
-        returned
-        env.events().publish((Symbol::new(&env, "TokensRevoked"), vault_id), (unreleased_amount, timestamp));
 
         unreleased_amount
     }
@@ -1088,9 +1068,23 @@ impl VestingContract {
         Self::require_admin(&env);
 
         let mut total_returned: i128 = 0;
+        let mut total_shares_change: i128 = 0;
+        
         for id in vault_ids.iter() {
-            let returned = Self::internal_revoke_full(&env, id);
-            total_returned += returned;
+            let vault: Vault = env.storage().instance().get(&DataKey::VaultData(id)).unwrap_or_else(|| panic!("Vault not found"));
+            
+            if vault.is_irrevocable { panic!("Vault is irrevocable"); }
+            
+            let unreleased_amount = vault.total_amount - vault.released_amount;
+            if unreleased_amount > 0 {
+                total_returned += unreleased_amount;
+                total_shares_change += unreleased_amount;
+                
+                // Update vault to mark all tokens as released
+                let mut updated_vault = vault;
+                updated_vault.released_amount = vault.total_amount;
+                env.storage().instance().set(&DataKey::VaultData(id), &updated_vault);
+            }
         }
 
         // Single admin balance update for the whole batch
@@ -1103,9 +1097,10 @@ impl VestingContract {
         env.storage()
             .instance()
             .set(&DataKey::AdminBalance, &admin_balance);
-        total_returned
+            
+        // Update total shares
         let mut total_shares: i128 = env.storage().instance().get(&DataKey::TotalShares).unwrap_or(0);
-        total_shares -= amount;
+        total_shares -= total_shares_change;
         env.storage().instance().set(&DataKey::TotalShares, &total_shares);
 
         let timestamp = env.ledger().timestamp();
@@ -1115,9 +1110,6 @@ impl VestingContract {
         );
 
         total_returned
-        env.events().publish((Symbol::new(&env, "TokensRevoked"), vault_id), (amount, timestamp));
-
-        amount
     }
 
     pub fn clawback_vault(env: Env, vault_id: u64) -> i128 {
@@ -1289,13 +1281,11 @@ impl VestingContract {
     }
 
     pub fn get_claimable_amount(env: Env, vault_id: u64) -> i128 {
-        let vault: Vault = env.storage().instance()
         let vault: Vault = env
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
             .unwrap_or_else(|| panic!("Vault not found"));
-        let vault: Vault = env.storage().instance().get(&DataKey::VaultData(vault_id)).unwrap_or_else(|| panic!("Vault not found"));
 
         let vested = Self::calculate_time_vested_amount(&env, &vault);
 
