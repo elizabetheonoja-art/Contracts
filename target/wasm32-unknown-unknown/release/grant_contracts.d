@@ -1,1 +1,1 @@
-/workspaces/contracts/target/wasm32-unknown-unknown/release/grant_contracts.wasm: /workspaces/contracts/src/lib.rs
+/home/abujulaybeeb/Documents/Drips/Contracts/target/wasm32-unknown-unknown/release/grant_contracts.wasm: /home/abujulaybeeb/Documents/Drips/Contracts/contracts/grant_contracts/src/lib.rs /home/abujulaybeeb/Documents/Drips/Contracts/contracts/grant_contracts/src/test.rs

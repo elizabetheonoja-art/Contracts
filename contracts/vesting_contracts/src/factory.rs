@@ -18,7 +18,7 @@ enum DataKey {
 #[contractimpl]
 impl VestingFactory {
     /// Initialize the factory with the WASM hash of the vesting contract
-    pub fn initialize(env: Env, wasm_hash: BytesN<32>) {
+    pub fn init_factory(env: Env, wasm_hash: BytesN<32>) {
         // Store the WASM hash for future deployments
         env.storage().instance().set(&DataKey::WasmHash, &wasm_hash);
 
