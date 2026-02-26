@@ -1,10 +1,13 @@
 #[cfg(test)]
 mod tests {
+    use crate::{
+        BatchCreateData, Milestone, VestingContract, VestingContractClient,
+    };
     use crate::{BatchCreateData, Milestone, VestingContract, VestingContractClient};
     use soroban_sdk::{
         contract, contractimpl,
         testutils::{Address as _, Ledger},
-        token, vec, Address, Env, Symbol,
+        token, vec, Address, Env, Symbol, String,
     };
 
     // -------------------------------------------------------------------------
@@ -308,6 +311,77 @@ mod tests {
     }
 
     #[test]
+    fn test_periodic_vesting_monthly_steps() {
+        let (env, _cid, client, _admin, _token) = setup();
+        let beneficiary = Address::generate(&env);
+        
+        // Create vault with monthly vesting (30 days = 2,592,000 seconds)
+        let amount = 1200000i128; // 1,200,000 tokens over 12 months = 100,000 per month
+        let start_time = 1000000u64;
+        let end_time = start_time + (365 * 24 * 60 * 60); // 1 year
+        let step_duration = 30 * 24 * 60 * 60; // 30 days in seconds
+        let keeper_fee = 1000i128;
+        
+        let vault_id = client.create_vault_full(
+            &beneficiary,
+            &amount,
+            &start_time,
+            &end_time,
+            &keeper_fee,
+            &false, // revocable
+            &true,  // transferable
+            &step_duration,
+        );
+        
+        // Test 1: Before start time - no vesting
+        env.ledger().with_mut(|l| l.timestamp = start_time - 1000);
+        let claimable = client.get_claimable_amount(&vault_id);
+        assert_eq!(claimable, 0, "Should have no claimable tokens before start time");
+        
+        // Test 2: After 15 days (less than one step) - still no vesting (rounds down)
+        env.ledger().with_mut(|l| l.timestamp = start_time + (15 * 24 * 60 * 60));
+        let claimable = client.get_claimable_amount(&vault_id);
+        assert_eq!(claimable, 0, "Should have no claimable tokens before first step completes");
+        
+        // Test 3: After exactly 30 days - one step completed
+        env.ledger().with_mut(|l| l.timestamp = start_time + step_duration);
+        let claimable = client.get_claimable_amount(&vault_id);
+        let expected_monthly = amount / 12; // 100,000 tokens per month
+        assert_eq!(claimable, expected_monthly, "Should have exactly one month of tokens after 30 days");
+        
+        // Test 4: After 45 days - still only one step (rounds down)
+        env.ledger().with_mut(|l| l.timestamp = start_time + (45 * 24 * 60 * 60));
+        let claimable = client.get_claimable_amount(&vault_id);
+        assert_eq!(claimable, expected_monthly, "Should still have only one month of tokens after 45 days");
+        
+        // Test 5: After 60 days - two steps completed
+        env.ledger().with_mut(|l| l.timestamp = start_time + (2 * step_duration));
+        let claimable = client.get_claimable_amount(&vault_id);
+        assert_eq!(claimable, 2 * expected_monthly, "Should have two months of tokens after 60 days");
+        
+        // Test 6: After 6 months - 6 steps completed
+        env.ledger().with_mut(|l| l.timestamp = start_time + (6 * step_duration));
+        let claimable = client.get_claimable_amount(&vault_id);
+        assert_eq!(claimable, 6 * expected_monthly, "Should have six months of tokens after 6 months");
+        
+        // Test 7: After end time - all tokens vested
+        env.ledger().with_mut(|l| l.timestamp = end_time + 1000);
+        let claimable = client.get_claimable_amount(&vault_id);
+        assert_eq!(claimable, amount, "Should have all tokens vested after end time");
+    }
+
+    #[test]
+    fn test_periodic_vesting_weekly_steps() {
+        let (env, _cid, client, _admin, _token) = setup();
+        let beneficiary = Address::generate(&env);
+        
+        // Create vault with weekly vesting (7 days = 604,800 seconds)
+        let amount = 520000i128; // 520,000 tokens over 52 weeks = 10,000 per week
+        let start_time = 1000000u64;
+        let end_time = start_time + (365 * 24 * 60 * 60); // 1 year
+        let step_duration = 7 * 24 * 60 * 60; // 7 days in seconds
+        let keeper_fee = 100i128;
+        
     fn test_admin_access_control() {
         let (env, contract_id, client, admin) = setup();
         let new_admin = Address::generate(&env);
@@ -358,6 +432,137 @@ mod tests {
             &true,  // transferable
             &step_duration,
         );
+        
+        // Test: After 3 weeks - 3 steps completed
+        env.ledger().with_mut(|l| l.timestamp = start_time + (3 * step_duration));
+        let claimable = client.get_claimable_amount(&vault_id);
+        let expected_weekly = 10000i128; // 10,000 tokens per week
+        assert_eq!(claimable, 3 * expected_weekly, "Should have three weeks of tokens after 3 weeks");
+        
+        // Test: After 10 weeks - 10 steps completed
+        env.ledger().with_mut(|l| l.timestamp = start_time + (10 * step_duration));
+        let claimable = client.get_claimable_amount(&vault_id);
+        assert_eq!(claimable, 10 * expected_weekly, "Should have ten weeks of tokens after 10 weeks");
+    }
+
+    #[test]
+    fn test_linear_vesting_step_duration_zero() {
+        let (env, _cid, client, _admin, _token) = setup();
+        let beneficiary = Address::generate(&env);
+        
+        // Create vault with linear vesting (step_duration = 0)
+        let amount = 1200000i128;
+        let start_time = 1000000u64;
+        let end_time = start_time + (365 * 24 * 60 * 60); // 1 year
+        let step_duration = 0u64; // Linear vesting
+        let keeper_fee = 1000i128;
+        
+        let vault_id = client.create_vault_full(
+            &beneficiary,
+            &amount,
+            &start_time,
+            &end_time,
+            &keeper_fee,
+            &false, // revocable
+            &true,  // transferable
+            &step_duration,
+        );
+        
+        // Test: After 6 months (half the duration) - should have 50% vested
+        env.ledger().with_mut(|l| l.timestamp = start_time + (182 * 24 * 60 * 60)); // ~6 months
+        let claimable = client.get_claimable_amount(&vault_id);
+        let expected_half = amount / 2; // 50% of tokens
+        // Due to integer math and exactly 182 days vs 365, it will be close
+        assert!(claimable > 598000i128 && claimable < 602000i128, "Should have ~50% of tokens after half the time for linear vesting");
+        
+        // Test: After 3 months (quarter of the duration) - should have 25% vested
+        env.ledger().with_mut(|l| l.timestamp = start_time + (91 * 24 * 60 * 60)); // ~3 months
+        let claimable = client.get_claimable_amount(&vault_id);
+        assert!(claimable > 298000i128 && claimable < 302000i128, "Should have ~25% of tokens after quarter of the time for linear vesting");
+    }
+
+    #[test]
+    fn test_periodic_vesting_claim_partial() {
+        let (env, _cid, client, _admin, _token) = setup();
+        let beneficiary = Address::generate(&env);
+        
+        // Create vault with monthly vesting
+        let amount = 120000i128; // 120,000 tokens over 12 months = 10,000 per month
+        let start_time = 1000000u64;
+        let end_time = start_time + (365 * 24 * 60 * 60); // 1 year
+        let step_duration = 30 * 24 * 60 * 60; // 30 days
+        let keeper_fee = 100i128;
+        
+        let vault_id = client.create_vault_full(
+            &beneficiary,
+            &amount,
+            &start_time,
+            &end_time,
+            &keeper_fee,
+            &false, // revocable
+            &true,  // transferable
+            &step_duration,
+        );
+        
+        // Move time to 3 months
+        env.ledger().with_mut(|l| l.timestamp = start_time + (3 * step_duration));
+        
+        // Claim partial amount
+        let claim_amount = 15000i128; // Less than the 30,000 available
+        let claimed = client.claim_tokens(&vault_id, &claim_amount);
+        assert_eq!(claimed, claim_amount, "Should claim the requested amount");
+        
+        // Check remaining claimable
+        let remaining_claimable = client.get_claimable_amount(&vault_id);
+        assert_eq!(remaining_claimable, 15000i128, "Should have 15,000 tokens remaining claimable");
+        
+        // Claim the rest
+        let final_claim = client.claim_tokens(&vault_id, &remaining_claimable);
+        assert_eq!(final_claim, remaining_claimable, "Should claim remaining tokens");
+        
+        // Check no more tokens available
+        let no_more_claimable = client.get_claimable_amount(&vault_id);
+        assert_eq!(no_more_claimable, 0, "Should have no more claimable tokens");
+    }
+
+    #[test]
+    fn test_step_vesting_fuzz() {
+        let (env, _cid, client, _admin, _token) = setup();
+        let beneficiary = Address::generate(&env);
+        
+        // Fuzz testing with prime numbers to check for truncation errors
+        // Primes: 1009 (amount), 17 (step), 101 (duration)
+        let total_amount = 1009i128;
+        let start_time = 1000u64;
+        let duration = 101u64; // Prime duration
+        let end_time = start_time + duration;
+        let step_duration = 17u64; // Prime step
+        
+        let vault_id = client.create_vault_full(
+            &beneficiary,
+            &total_amount,
+            &start_time,
+            &end_time,
+            &0i128,
+            &true,
+            &true,
+            &step_duration,
+        );
+
+        // Advance time to end
+        env.ledger().with_mut(|li| {
+            li.timestamp = end_time + 1;
+        });
+
+        // Claim all
+        let claimed = client.claim_tokens(&vault_id, &total_amount);
+        
+        // Assert full amount is claimed
+        assert_eq!(claimed, total_amount);
+        
+        // Verify vault state
+        let vault = client.get_vault(&vault_id);
+        assert_eq!(vault.released_amount, total_amount);
 
         // Test 1: Before start time - no vesting
         env.ledger().set_timestamp(start_time - 1000);

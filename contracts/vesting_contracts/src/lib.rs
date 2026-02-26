@@ -66,8 +66,6 @@ pub struct Vault {
     pub is_irrevocable: bool, // Security flag to prevent admin withdrawal
     pub creation_time: u64, // Timestamp of creation for clawback grace period
     pub is_transferable: bool, // Can the beneficiary transfer this vault?
-    pub step_duration: u64, // Duration of each vesting step in seconds (0 = linear)
-    pub staked_amount: i128, // Amount currently staked in external contract
     pub is_frozen: bool, // Individual vault freeze flag for security investigations
     pub creation_time: u64, // Timestamp of creation for clawback grace period
     pub step_duration: u64, // Duration of each vesting step in seconds (0 = linear)
@@ -214,7 +212,7 @@ impl VestingContract {
         env.storage().instance().set(&DataKey::Token, &token);
     }
 
-    fn get_token_client(env: &Env) -> token::Client {
+    fn get_token_client(env: &Env) -> token::Client<'_> {
         let token: Address = env
             .storage()
             .instance()
@@ -704,6 +702,26 @@ impl VestingContract {
             elapsed
         };
 
+        if vault.step_duration > 0 {
+            let completed_steps = elapsed / vault.step_duration;
+            let rate_per_second = vault.total_amount / duration as i128;
+            let vested = completed_steps as i128 * rate_per_second * vault.step_duration as i128;
+            
+            // Ensure we don't exceed total amount
+            if vested > vault.total_amount {
+                vault.total_amount
+            } else {
+                vested
+            }
+        } else {
+            // Linear vesting
+            (vault.total_amount * elapsed as i128) / duration as i128
+        }
+    }
+
+    // Keep original signature for existing logic to use current ledger time
+    fn calculate_time_vested_amount(env: &Env, vault: &Vault) -> i128 {
+        Self::calculate_time_vested_amount_at(vault, env.ledger().timestamp())
         (vault.total_amount * effective_elapsed as i128) / duration as i128
     }
 
@@ -1183,6 +1201,9 @@ impl VestingContract {
                 start_time,
                 end_time,
                 keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
+                title: String::from_slice(&env, ""),
+                is_initialized: false, // Lazy initialization
+                is_irrevocable: false, // Default to revocable for batch operations
                 is_initialized: false,
                 is_irrevocable: false,
                 creation_time: now,
@@ -1531,10 +1552,16 @@ impl VestingContract {
             (amount, timestamp),
         );
 
+        let mut total_shares: i128 = env.storage().instance().get(&DataKey::TotalShares).unwrap_or(0);
+        total_shares -= amount;
+        env.storage().instance().set(&DataKey::TotalShares, &total_shares);
+
+        let timestamp = env.ledger().timestamp();
+        env.events().publish((Symbol::new(&env, "TokensRevoked"), vault_id), (amount, timestamp));
+
         amount
     }
 
-    // Admin-only: Revoke many vaults in a single call and credit the admin once.
     pub fn batch_revoke(env: Env, vault_ids: Vec<u64>) -> i128 {
         Self::require_admin(&env);
 
