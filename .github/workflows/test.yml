@@ -31,7 +31,9 @@ jobs:
           sudo mv stellar /usr/local/bin/
 
       - name: Build Contract
-        run: cargo build --target wasm32-unknown-unknown --release
+        run: |
+          cargo clean
+          cargo build --target wasm32-unknown-unknown --release
 
       - name: Run Unit Tests
         run: cargo test
