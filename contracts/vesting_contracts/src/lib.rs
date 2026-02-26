@@ -6,6 +6,9 @@ use soroban_sdk::{
     Vec,
 };
 
+// 10 years in seconds (Issue #44)
+pub const MAX_DURATION: u64 = 315_360_000;
+
 // DataKey for whitelisted tokens
 #[contracttype]
 pub enum WhitelistDataKey {
@@ -51,6 +54,12 @@ pub struct Vault {
     pub released_amount: i128,
     pub start_time: u64,
     pub end_time: u64,
+    pub creation_time: u64, // Timestamp of creation for clawback grace period
+    pub step_duration: u64, // Duration of each vesting step in seconds (0 = linear)
+
+    pub is_initialized: bool,  // Lazy initialization flag
+    pub is_irrevocable: bool,  // Security flag to prevent admin withdrawal
+    pub is_transferable: bool, // Can the beneficiary transfer this vault?
     pub keeper_fee: i128, // Fee paid to anyone who triggers auto_claim
         pub title: String, // Short human-readable title (max 32 chars)
     pub is_initialized: bool, // Lazy initialization flag
@@ -115,6 +124,26 @@ pub struct VestingContract;
 #[contractimpl]
 #[allow(deprecated)]
 impl VestingContract {
+    fn require_not_deprecated(env: &Env) {
+        let deprecated: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::IsDeprecated)
+            .unwrap_or(false);
+        if deprecated {
+            panic!("Contract is deprecated");
+        }
+    }
+
+    fn require_valid_duration(start_time: u64, end_time: u64) {
+        let duration = end_time
+            .checked_sub(start_time)
+            .unwrap_or_else(|| panic!("end_time must be >= start_time"));
+        if duration > MAX_DURATION {
+            panic!("duration exceeds MAX_DURATION");
+        }
+    }
+
     // Admin-only: Add token to whitelist
     pub fn add_to_whitelist(env: Env, token: Address) {
         Self::require_admin(&env);
@@ -424,6 +453,7 @@ impl VestingContract {
     ) -> u64 {
 
         Self::require_admin(&env);
+        Self::require_valid_duration(start_time, end_time);
 
         let mut vault_count: u64 = env
             .storage()
@@ -528,6 +558,7 @@ impl VestingContract {
         step_duration: u64,
     ) -> u64 {
         Self::require_admin(&env);
+        Self::require_valid_duration(start_time, end_time);
 
         let mut vault_count: u64 = env
             .storage()
@@ -673,24 +704,6 @@ impl VestingContract {
             elapsed
         };
 
-        if vault.step_duration > 0 {
-            // Periodic vesting: calculate vested = (elapsed / step_duration) * rate * step_duration
-            // Rate is total_amount / duration, so: vested = (elapsed / step_duration) * (total_amount / duration) * step_duration
-            // This simplifies to: vested = (elapsed / step_duration) * total_amount * step_duration / duration
-            let completed_steps = elapsed / vault.step_duration;
-            let rate_per_second = vault.total_amount / duration as i128;
-            let vested = completed_steps as i128 * rate_per_second * vault.step_duration as i128;
-            
-            // Ensure we don't exceed total amount
-            if vested > vault.total_amount {
-                vault.total_amount
-            } else {
-                vested
-            }
-        } else {
-            // Linear vesting
-            (vault.total_amount * elapsed as i128) / duration as i128
-        }
         (vault.total_amount * effective_elapsed as i128) / duration as i128
     }
 
@@ -1157,6 +1170,9 @@ impl VestingContract {
         let now = env.ledger().timestamp();
         for i in 0..batch_data.recipients.len() {
             let vault_id = initial_count + i as u64 + 1;
+            let start_time: u64 = batch_data.start_times.get(i).unwrap();
+            let end_time: u64 = batch_data.end_times.get(i).unwrap();
+            Self::require_valid_duration(start_time, end_time);
 
             let vault = Vault {
                 title: String::from_slice(&env, ""),
@@ -1164,12 +1180,9 @@ impl VestingContract {
                 delegate: None,
                 total_amount: batch_data.amounts.get(i).unwrap(),
                 released_amount: 0,
-                start_time: batch_data.start_times.get(i).unwrap(),
-                end_time: batch_data.end_times.get(i).unwrap(),
+                start_time,
+                end_time,
                 keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
-                title: String::from_slice(&env, ""),
-                is_initialized: false, // Lazy initialization
-                is_irrevocable: false, // Default to revocable for batch operations
                 is_initialized: false,
                 is_irrevocable: false,
                 creation_time: now,
@@ -1184,7 +1197,6 @@ impl VestingContract {
                 .set(&DataKey::VaultData(vault_id), &vault);
             vault_ids.push_back(vault_id);
 
-            let start_time = batch_data.start_times.get(i).unwrap();
             let cliff_duration = start_time.saturating_sub(now);
             let vault_created = VaultCreated {
                 vault_id,
@@ -1244,6 +1256,9 @@ impl VestingContract {
         let now = env.ledger().timestamp();
         for i in 0..batch_data.recipients.len() {
             let vault_id = initial_count + i as u64 + 1;
+            let start_time: u64 = batch_data.start_times.get(i).unwrap();
+            let end_time: u64 = batch_data.end_times.get(i).unwrap();
+            Self::require_valid_duration(start_time, end_time);
 
             let vault = Vault {
                 title: String::from_slice(&env, ""),
@@ -1251,8 +1266,8 @@ impl VestingContract {
                 delegate: None,
                 total_amount: batch_data.amounts.get(i).unwrap(),
                 released_amount: 0,
-                start_time: batch_data.start_times.get(i).unwrap(),
-                end_time: batch_data.end_times.get(i).unwrap(),
+                start_time,
+                end_time,
                 keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
                 title: String::from_slice(&env, ""),
                 is_initialized: true,
@@ -1280,7 +1295,6 @@ impl VestingContract {
 
             vault_ids.push_back(vault_id);
 
-            let start_time = batch_data.start_times.get(i).unwrap();
             let cliff_duration = start_time.saturating_sub(now);
             let vault_created = VaultCreated {
                 vault_id,
@@ -1433,6 +1447,12 @@ impl VestingContract {
     // Revoke a specific amount of tokens from a vault and return them to admin
     pub fn revoke_partial(env: Env, vault_id: u64, amount: i128) -> i128 {
         Self::require_admin(&env);
+
+        let mut vault: Vault = env
+            .storage()
+            .instance()
+            .get(&DataKey::VaultData(vault_id))
+            .unwrap_or_else(|| panic!("Vault not found"));
 
         let returned = Self::internal_revoke_partial(&env, vault_id, amount);
 
@@ -1593,6 +1613,10 @@ impl VestingContract {
         if now > vault.creation_time + grace_period {
             panic!("Grace period expired");
         }
+        if vault.released_amount > 0 {
+            panic!("Tokens already claimed");
+        }
+
 
         if vault.released_amount > 0 {
             panic!("Tokens already claimed");
@@ -1908,7 +1932,6 @@ impl VestingContract {
 
     // Calculate currently claimable tokens based on linear vesting
     pub fn get_claimable_amount(env: Env, vault_id: u64) -> i128 {
-        let vault: Vault = env.storage().instance()
         let vault: Vault = env
             .storage()
             .instance()
@@ -1927,7 +1950,6 @@ impl VestingContract {
     // Auto-claim function that anyone can call.
     // Tokens go to beneficiary, but keeper earns a fee.
     pub fn auto_claim(env: Env, vault_id: u64, keeper: Address) {
-        let mut vault: Vault = env.storage().instance()
         if Self::is_paused(env.clone()) {
             panic!("Contract is paused - all withdrawals are disabled");
         }
@@ -2105,4 +2127,7 @@ impl VestingContract {
     }
 }
 
+// Unit tests for this contract are kept as integration tests under
+// `contracts/vesting_contracts/tests/` to avoid `no_std` test-harness friction.
+// mod test;
 // mod test; // Disabled - tests need refactoring
