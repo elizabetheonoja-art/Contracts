@@ -34,6 +34,18 @@ pub enum DataKey {
     IsPaused,
     IsDeprecated,
     MigrationTarget,
+    Token,        // yield-bearing token
+    TotalShares,  // remaining initial_deposit_shares
+    TotalStaked,
+}
+
+mod factory;
+pub use factory::{VestingFactory, VestingFactoryClient};
+
+#[contract]
+pub struct VestingContract;
+
+// Vault structure with lazy initialization
     Token,       // yield-bearing token
     TotalShares, // remaining initial_deposit_shares
     TotalStaked,
@@ -116,8 +128,6 @@ pub struct VaultCreated {
 // mod factory;
 // pub use factory::{VestingFactory, VestingFactoryClient};
 
-#[contract]
-pub struct VestingContract;
 
 #[contractimpl]
 #[allow(deprecated)]
@@ -169,6 +179,8 @@ impl VestingContract {
     // Initialize contract with initial supply
     pub fn initialize(env: Env, admin: Address, initial_supply: i128) {
         Self::require_not_deprecated(&env);
+        env.storage().instance().set(&DataKey::InitialSupply, &initial_supply);
+        env.storage().instance().set(&DataKey::AdminBalance, &initial_supply);
 
         env.storage().instance().set(&DataKey::AdminAddress, &admin);
         env.storage()
@@ -325,6 +337,9 @@ impl VestingContract {
             );
         }
 
+        let timestamp = env.ledger().timestamp();
+        env.events()
+            .publish((Symbol::new(&env, "ContractDeprecated"),), (v2_contract_address, timestamp));
         env.events().publish(
             (Symbol::new(&env, "ContractDeprecated"),),
             v2_contract_address,
@@ -475,6 +490,8 @@ impl VestingContract {
 
         let now = env.ledger().timestamp();
 
+        let is_irrevocable = !is_revocable;
+
         let vault = Vault {
             title: String::from_slice(&env, ""),
             owner: owner.clone(),
@@ -486,12 +503,13 @@ impl VestingContract {
             keeper_fee,
             title: String::from_slice(&env, ""),
             is_initialized: true,
-            is_irrevocable: !is_revocable,
+            is_irrevocable,
             creation_time: now,
             is_transferable,
             step_duration,
             staked_amount: 0,
             is_frozen: false,
+            title: String::from_slice(&env, ""),
         };
 
         env.storage()
@@ -580,6 +598,8 @@ impl VestingContract {
 
         let now = env.ledger().timestamp();
 
+        let is_irrevocable = !is_revocable;
+
         let vault = Vault {
             title: String::from_slice(&env, ""),
             owner: owner.clone(),
@@ -589,6 +609,8 @@ impl VestingContract {
             start_time,
             end_time,
             keeper_fee,
+            is_initialized: false,
+            is_irrevocable,
             title: String::from_slice(&env, ""),
             is_initialized: false, // Mark as lazy initialized
             is_irrevocable: !is_revocable,
@@ -597,6 +619,7 @@ impl VestingContract {
             step_duration,
             staked_amount: 0,
             is_frozen: false,
+            title: String::from_slice(&env, ""),
         };
 
         env.storage()
@@ -727,6 +750,8 @@ impl VestingContract {
 
     // Claim tokens from vault
     pub fn claim_tokens(env: Env, vault_id: u64, claim_amount: i128) -> i128 {
+        if Self::is_paused(env.clone()) {
+            panic!("Contract is paused");
         // Check if contract is paused
         if Self::is_paused(env.clone()) {
             panic!("Contract is paused - all withdrawals are disabled");
@@ -940,12 +965,14 @@ impl VestingContract {
 
     // Claim tokens as delegate (tokens still go to owner)
     pub fn claim_as_delegate(env: Env, vault_id: u64, claim_amount: i128) -> i128 {
+        if Self::is_paused(env.clone()) {
+            panic!("Contract is paused");
         // Check if contract is paused
         if Self::is_paused(env.clone()) {
             panic!("Contract is paused - all withdrawals are disabled");
         }
 
-        let vault: Vault = env
+        let mut vault: Vault = env
             .storage()
             .instance()
             .get(&DataKey::VaultData(vault_id))
@@ -1192,14 +1219,25 @@ impl VestingContract {
             let end_time: u64 = batch_data.end_times.get(i).unwrap();
             Self::require_valid_duration(start_time, end_time);
 
+            let owner = batch_data.recipients.get(i).unwrap();
+            let amount = batch_data.amounts.get(i).unwrap();
+            let start_time = batch_data.start_times.get(i).unwrap();
+            let end_time = batch_data.end_times.get(i).unwrap();
+            let keeper_fee = batch_data.keeper_fees.get(i).unwrap();
+            let step_duration = batch_data.step_durations.get(i).unwrap_or(0);
+            let is_transferable = false;
+            let is_irrevocable = false;
+
             let vault = Vault {
+                owner: owner.clone(),
                 title: String::from_slice(&env, ""),
                 owner: batch_data.recipients.get(i).unwrap(),
                 delegate: None,
-                total_amount: batch_data.amounts.get(i).unwrap(),
+                total_amount: amount,
                 released_amount: 0,
                 start_time,
                 end_time,
+                keeper_fee,
                 keeper_fee: batch_data.keeper_fees.get(i).unwrap(),
                 title: String::from_slice(&env, ""),
                 is_initialized: false, // Lazy initialization
@@ -1207,10 +1245,13 @@ impl VestingContract {
                 is_initialized: false,
                 is_irrevocable: false,
                 creation_time: now,
-                is_transferable: false,
-                step_duration: batch_data.step_durations.get(i).unwrap_or(0),
+                step_duration,
+                is_initialized: false, // Lazy initialization
+                is_irrevocable,
+                is_transferable,
                 staked_amount: 0,
                 is_frozen: false,
+                title: String::from_slice(&env, ""),
             };
 
             env.storage()
@@ -1298,6 +1339,7 @@ impl VestingContract {
                 step_duration: batch_data.step_durations.get(i).unwrap_or(0),
                 staked_amount: 0,
                 is_frozen: false,
+                title: String::from_slice(&env, ""),
             };
 
             env.storage()
@@ -1426,6 +1468,7 @@ impl VestingContract {
 
         unreleased_amount
     }
+
 
     // Admin-only: Revoke tokens from a vault and return them to admin
     pub fn revoke_tokens(env: Env, vault_id: u64) -> i128 {

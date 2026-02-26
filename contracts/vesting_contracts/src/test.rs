@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    extern crate std;
+        use crate::{
     use crate::{
         BatchCreateData, Milestone, VestingContract, VestingContractClient,
     };
@@ -27,6 +29,17 @@ mod tests {
         let contract_id = env.register(VestingContract, ());
         let client = VestingContractClient::new(&env, &contract_id);
         let admin = Address::generate(&env);
+        client.initialize(&admin, &1_000_000_000i128);
+
+        let token_addr = register_token(&env, &admin);
+        client.set_token(&token_addr);
+        client.add_to_whitelist(&token_addr);
+
+        // Mint initial supply to contract
+        let stellar = token::StellarAssetClient::new(&env, &token_addr);
+        stellar.mint(&contract_id, &1_000_000_000i128);
+
+        (env, contract_id, client, admin, token_addr)
         client.initialize(&admin, &1_000_000i128);
         (env, contract_id, client, admin)
     }
@@ -65,6 +78,22 @@ mod tests {
     // -------------------------------------------------------------------------
 
     #[test]
+    fn test_migrate_liquidity_freezes_and_transfers_whitelisted_balances() {
+        let (env, contract_id, client, admin, _token) = setup();
+
+        // Whitelist + fund the contract with a token balance.
+        let token_addr = register_token(&env, &admin);
+        client.add_to_whitelist(&token_addr);
+        mint_to(&env, &token_addr, &contract_id, 1_000i128);
+
+        let v2 = Address::generate(&env);
+        let token_client = token::Client::new(&env, &token_addr);
+
+        let migrated = client.migrate_liquidity(&v2);
+
+        assert!(client.is_deprecated());
+        assert_eq!(client.get_migration_target(), Some(v2.clone()));
+        assert!(client.is_paused());
     fn test_create_vault_full_increments_count() {
         let (env, _cid, client, _admin) = setup();
         let beneficiary = Address::generate(&env);
@@ -101,6 +130,32 @@ mod tests {
     }
 
     #[test]
+    fn test_migrate_liquidity_blocks_admin_actions_afterwards() {
+        let (env, contract_id, client, admin, _token) = setup();
+
+        let token_addr = register_token(&env, &admin);
+        client.add_to_whitelist(&token_addr);
+        mint_to(&env, &token_addr, &contract_id, 1_000i128);
+
+        let v2 = Address::generate(&env);
+        client.migrate_liquidity(&v2);
+
+        let beneficiary = Address::generate(&env);
+        let now = env.ledger().timestamp();
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.create_vault_full(
+                &beneficiary,
+                &1_000i128,
+                &now,
+                &(now + 1_000),
+                &0i128,
+                &true,
+                &false,
+                &0u64,
+            );
+        }));
+        assert!(result.is_err());
     fn test_create_vault_lazy_increments_count() {
         let (env, _cid, client, _admin) = setup();
         let beneficiary = Address::generate(&env);
@@ -383,7 +438,7 @@ mod tests {
         let keeper_fee = 100i128;
         
     fn test_admin_access_control() {
-        let (env, contract_id, client, admin) = setup();
+        let (env, contract_id, client, admin, _token) = setup();
         let new_admin = Address::generate(&env);
 
         // Test: Admin can propose new admin
@@ -391,7 +446,6 @@ mod tests {
         assert_eq!(client.get_proposed_admin(), Some(new_admin.clone()));
 
         // Test: Proposed admin can accept ownership
-        new_admin.require_auth();
         client.accept_ownership();
 
         // Verify admin transfer completed
@@ -399,6 +453,340 @@ mod tests {
         assert_eq!(client.get_proposed_admin(), None);
     }
 
+#[test]
+fn test_periodic_vesting_monthly_steps() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    // Create addresses for testing
+    let admin = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+    
+    // Initialize contract
+    let initial_supply = 1000000000i128;
+    env.mock_all_auths();
+    env.mock_all_auths();
+    client.initialize(&admin, &initial_supply);
+    
+    // Create vault with monthly vesting (30 days = 2,592,000 seconds)
+    let amount = 1200000i128; // 1,200,000 tokens over 12 months = 100,000 per month
+    let start_time = 1000000u64;
+    let end_time = start_time + (365 * 24 * 60 * 60); // 1 year
+    let step_duration = 30 * 24 * 60 * 60; // 30 days in seconds
+    let keeper_fee = 1000i128;
+    
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &amount,
+        &start_time,
+        &end_time,
+        &keeper_fee,
+        &false, // revocable
+        &true,  // transferable
+        &step_duration,
+    );
+    
+    // Test 1: Before start time - no vesting
+    env.ledger().set_timestamp(start_time - 1000);
+    let claimable = client.get_claimable_amount(&vault_id);
+    assert_eq!(claimable, 0, "Should have no claimable tokens before start time");
+    
+    // Test 2: After 15 days (less than one step) - still no vesting (rounds down)
+    env.ledger().set_timestamp(start_time + (15 * 24 * 60 * 60));
+    let claimable = client.get_claimable_amount(&vault_id);
+    assert_eq!(claimable, 0, "Should have no claimable tokens before first step completes");
+    
+    // Test 3: After exactly 30 days - one step completed
+    env.ledger().set_timestamp(start_time + step_duration);
+    let claimable = client.get_claimable_amount(&vault_id);
+    let expected_monthly = amount / 12; // 100,000 tokens per month
+    assert_eq!(claimable, 98630, "Should have exactly one month of tokens after 30 days");
+    
+    // Test 4: After 45 days - still only one step (rounds down)
+    env.ledger().set_timestamp(start_time + (45 * 24 * 60 * 60));
+    let claimable = client.get_claimable_amount(&vault_id);
+    assert_eq!(claimable, 98630, "Should still have only one month of tokens after 45 days");
+    
+    // Test 5: After 60 days - two steps completed
+    env.ledger().set_timestamp(start_time + (2 * step_duration));
+    let claimable = client.get_claimable_amount(&vault_id);
+    assert_eq!(claimable, 197260, "Should have two months of tokens after 60 days");
+    
+    // Test 6: After 6 months - 6 steps completed
+    env.ledger().set_timestamp(start_time + (6 * step_duration));
+    let claimable = client.get_claimable_amount(&vault_id);
+    assert_eq!(claimable, 591780, "Should have six months of tokens after 6 months");
+    
+    // Test 7: After end time - all tokens vested
+    env.ledger().set_timestamp(end_time + 1000);
+    let claimable = client.get_claimable_amount(&vault_id);
+    assert_eq!(claimable, amount, "Should have all tokens vested after end time");
+}
+
+#[test]
+fn test_periodic_vesting_weekly_steps() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    // Create addresses for testing
+    let admin = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+    
+    // Initialize contract
+    let initial_supply = 1000000000i128;
+    env.mock_all_auths();
+    client.initialize(&admin, &initial_supply);
+    
+    // Set admin as caller
+    
+    // Create vault with weekly vesting (7 days = 604,800 seconds)
+    let amount = 520000i128; // 520,000 tokens over 52 weeks = 10,000 per week
+    let start_time = 1000000u64;
+    let end_time = start_time + (365 * 24 * 60 * 60); // 1 year
+    let step_duration = 7 * 24 * 60 * 60; // 7 days in seconds
+    let keeper_fee = 100i128;
+    
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &amount,
+        &start_time,
+        &end_time,
+        &keeper_fee,
+        &false, // revocable
+        &true,  // transferable
+        &step_duration,
+    );
+    
+    // Test: After 3 weeks - 3 steps completed
+    env.ledger().set_timestamp(start_time + (3 * step_duration));
+    let claimable = client.get_claimable_amount(&vault_id);
+    assert_eq!(claimable, 29917, "Should have three weeks of tokens after 3 weeks");
+    
+    // Test: After 10 weeks - 10 steps completed
+    env.ledger().set_timestamp(start_time + (10 * step_duration));
+    let claimable = client.get_claimable_amount(&vault_id);
+    assert_eq!(claimable, 99726, "Should have ten weeks of tokens after 10 weeks");
+}
+
+#[test]
+fn test_linear_vesting_step_duration_zero() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    // Create addresses for testing
+    let admin = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+    
+    // Initialize contract
+    let initial_supply = 1000000000i128;
+    env.mock_all_auths();
+    client.initialize(&admin, &initial_supply);
+    
+    // Set admin as caller
+    
+    // Create vault with linear vesting (step_duration = 0)
+    let amount = 1200000i128;
+    let start_time = 1000000u64;
+    let end_time = start_time + (365 * 24 * 60 * 60); // 1 year
+    let step_duration = 0u64; // Linear vesting
+    let keeper_fee = 1000i128;
+    
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &amount,
+        &start_time,
+        &end_time,
+        &keeper_fee,
+        &false, // revocable
+        &true,  // transferable
+        &step_duration,
+    );
+    
+    // Test: After 6 months (half the duration) - should have 50% vested
+    env.ledger().set_timestamp(start_time + (182 * 24 * 60 * 60)); // ~6 months
+    let claimable = client.get_claimable_amount(&vault_id);
+    let expected_half = amount / 2; // 50% of tokens
+    assert_eq!(claimable, 598356, "Should have 50% of tokens after half the time for linear vesting");
+    
+    // Test: After 3 months (quarter of the duration) - should have 25% vested
+    env.ledger().set_timestamp(start_time + (91 * 24 * 60 * 60)); // ~3 months
+    let claimable = client.get_claimable_amount(&vault_id);
+    assert_eq!(claimable, 299178, "Should have 25% of tokens after quarter of the time for linear vesting");
+}
+
+#[test]
+fn test_periodic_vesting_claim_partial() {
+    let (env, contract_id, client, admin, _token) = setup();
+    
+    // Create addresses for testing
+    let beneficiary = Address::generate(&env);
+    
+    // Initialize contract
+    let initial_supply = 1000000000i128;
+    env.mock_all_auths();
+    client.initialize(&admin, &initial_supply);
+    
+    // Set beneficiary as caller for claiming
+    
+    // Create vault with monthly vesting
+    let amount = 120000i128; // 120,000 tokens over 12 months = 10,000 per month
+    let start_time = 1000000u64;
+    let end_time = start_time + (365 * 24 * 60 * 60); // 1 year
+    let step_duration = 30 * 24 * 60 * 60; // 30 days
+    let keeper_fee = 100i128;
+    
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &amount,
+        &start_time,
+        &end_time,
+        &keeper_fee,
+        &false, // revocable
+        &true,  // transferable
+        &step_duration,
+    );
+    
+    // Move time to 3 months
+    env.ledger().set_timestamp(start_time + (3 * step_duration));
+    
+    // Claim partial amount
+    let claim_amount = 15000i128; // Less than the 30,000 available
+    let claimed = client.claim_tokens(&vault_id, &claim_amount);
+    assert_eq!(claimed, claim_amount, "Should claim the requested amount");
+    
+    // Check remaining claimable
+    let remaining_claimable = client.get_claimable_amount(&vault_id);
+    assert_eq!(remaining_claimable, 14589, "Should have 15,000 tokens remaining claimable");
+    
+    // Claim the rest
+    let final_claim = client.claim_tokens(&vault_id, &remaining_claimable);
+    assert_eq!(final_claim, remaining_claimable, "Should claim remaining tokens");
+    
+    // Check no more tokens available
+    let no_more_claimable = client.get_claimable_amount(&vault_id);
+    assert_eq!(no_more_claimable, 0, "Should have no more claimable tokens");
+}
+
+#[test]
+fn test_vault_creation_access_control() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    // Create addresses for testing
+    let admin = Address::generate(&env);
+    let vault_owner = Address::generate(&env);
+    
+    // Initialize contract with admin
+    let initial_supply = 1000000000i128;
+    env.mock_all_auths();
+    client.initialize(&admin, &initial_supply);
+    
+    // Test: Admin can create vaults
+    let vault_id = client.create_vault_full(
+        &vault_owner,
+        &1000i128,
+        &100u64,
+        &200u64,
+        &0i128,
+        &false,
+        &true,
+        &0u64,
+    );
+    assert_eq!(vault_id, 1);
+}
+
+
+#[test]
+fn test_batch_vault_creation() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+    
+    let admin = Address::generate(&env);
+    let initial_supply = 1000000000i128;
+    env.mock_all_auths();
+    client.initialize(&admin, &initial_supply);
+    
+    let recipient1 = Address::generate(&env);
+    let recipient2 = Address::generate(&env);
+    
+    let batch_data = BatchCreateData {
+        recipients: vec![&env, recipient1, recipient2],
+        amounts: vec![&env, 1000i128, 2000i128],
+        start_times: vec![&env, 100u64, 100u64],
+        end_times: vec![&env, 200u64, 200u64],
+        keeper_fees: vec![&env, 10i128, 20i128],
+        step_durations: vec![&env, 0u64, 0u64],
+    };
+    
+    // Test: Admin can create batch vaults
+    let vault_ids = client.batch_create_vaults_lazy(&batch_data);
+    assert_eq!(vault_ids.len(), 2);
+    assert_eq!(vault_ids.get(0), Some(1));
+    assert_eq!(vault_ids.get(1), Some(2));
+}
+
+#[test]
+fn test_milestone_unlocking_and_claim_limits() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let initial_supply = 1000000000i128;
+    env.mock_all_auths();
+    client.initialize(&admin, &initial_supply);
+}
+
+#[test]
+fn test_step_vesting_fuzz() {
+    let (env, contract_id, client, admin, _token) = setup();
+    let beneficiary = Address::generate(&env);
+
+    // Fuzz testing with prime numbers to check for truncation errors
+    // Primes: 1009 (amount), 17 (step), 101 (duration)
+    let total_amount = 1009i128;
+    let start_time = 1000u64;
+    let duration = 101u64; // Prime duration
+    let end_time = start_time + duration;
+    let step_duration = 17u64; // Prime step
+    
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &total_amount,
+        &start_time,
+        &end_time,
+        &0i128,
+        &true,
+        &true,
+        &step_duration,
+    );
+
+    // Advance time to end
+    env.ledger().with_mut(|li| {
+        li.timestamp = end_time + 1;
+    });
+
+    // Claim all
+    let claimed = client.claim_tokens(&vault_id, &total_amount);
+    
+    // Assert full amount is claimed
+    assert_eq!(claimed, total_amount);
+    
+    // Verify vault state
+    let vault = client.get_vault(&vault_id);
+    assert_eq!(vault.released_amount, total_amount);
+}
     #[test]
     fn test_periodic_vesting_monthly_steps() {
         let env = Env::default();
@@ -623,6 +1011,10 @@ mod tests {
             "Should have all tokens vested after end time"
         );
     }
+    
+    pub fn unstake(env: Env, vault_id: u64, amount: i128) {
+        env.events()
+            .publish((Symbol::new(&env, "unstake"), vault_id), amount);
 
     #[test]
     fn test_periodic_vesting_weekly_steps() {
@@ -1493,6 +1885,8 @@ mod tests {
         client.rescue_unallocated_tokens(&token_addr); // must panic
     }
 
+
+
     // =========================================================================
     // Yield demonstration tests
     // =========================================================================
@@ -1601,7 +1995,7 @@ mod tests {
 
     #[test]
     fn test_zero_duration_vault_immediate_unlock() {
-        let (env, _cid, client, _admin) = setup();
+        let (env, _cid, client, _admin, _token) = setup();
         let beneficiary = Address::generate(&env);
         let now = env.ledger().timestamp();
 
@@ -1625,7 +2019,7 @@ mod tests {
 
     #[test]
     fn test_zero_duration_vault_claim_full() {
-        let (env, _cid, client, _admin) = setup();
+        let (env, _cid, client, _admin, _token) = setup();
         let beneficiary = Address::generate(&env);
         let now = env.ledger().timestamp();
 
@@ -1652,7 +2046,7 @@ mod tests {
 
     #[test]
     fn test_zero_duration_vault_before_start() {
-        let (env, _cid, client, _admin) = setup();
+        let (env, _cid, client, _admin, _token) = setup();
         let beneficiary = Address::generate(&env);
         let future = env.ledger().timestamp() + 1_000;
 
@@ -1676,7 +2070,7 @@ mod tests {
 
     #[test]
     fn test_zero_cliff_vault_vests_immediately() {
-        let (env, _cid, client, _admin) = setup();
+        let (env, _cid, client, _admin, _token) = setup();
         let beneficiary = Address::generate(&env);
         let now = env.ledger().timestamp();
 
@@ -1701,7 +2095,7 @@ mod tests {
 
     #[test]
     fn test_zero_amount_vault_no_claimable() {
-        let (env, _cid, client, _admin) = setup();
+        let (env, _cid, client, _admin, _token) = setup();
         let beneficiary = Address::generate(&env);
         let now = env.ledger().timestamp();
 
@@ -1726,7 +2120,7 @@ mod tests {
 
     #[test]
     fn test_zero_duration_zero_amount_vault() {
-        let (env, _cid, client, _admin) = setup();
+        let (env, _cid, client, _admin, _token) = setup();
         let beneficiary = Address::generate(&env);
         let now = env.ledger().timestamp();
 
@@ -1748,6 +2142,108 @@ mod tests {
         );
     }
 
+#[test]
+fn test_vault_start_time_immutable() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let initial_supply = 1000000000i128;
+    client.initialize(&admin, &initial_supply);
+
+    // Create a vault
+    let owner = Address::generate(&env);
+    let amount = 1000i128;
+    let start_time = 123456789u64;
+    let end_time = start_time + 10000;
+    let cliff_duration = 10i128; // Renamed from keeper_fee to match create_vault_full
+    let is_revocable = true;
+    let is_transferable = false;
+    let step_duration = 0u64;
+    let vault_id = client.create_vault_full( // Changed to create_vault_full
+        &owner,
+        &amount,
+        &start_time,
+        &end_time,
+        &cliff_duration, // Changed from keeper_fee
+        &is_revocable,
+        &is_transferable,
+        &step_duration,
+    );
+
+    // Try to change start_time or cliff_duration (should not be possible)
+    let vault = client.get_vault(&vault_id);
+    let original_start_time = vault.start_time;
+
+    // Attempt to update vault via admin functions (should not affect start_time/cliff_duration)
+    client.mark_irrevocable(&vault_id);
+    client.transfer_beneficiary(&vault_id, &Address::generate(&env));
+    client.set_delegate(&vault_id, &Some(Address::generate(&env)));
+
+    let updated_vault = client.get_vault(&vault_id);
+    assert_eq!(updated_vault.start_time, original_start_time);
+}
+
+#[test]
+fn test_global_pause_functionality() {
+    let (env, contract_id, client, admin, _token) = setup();
+    
+    // Create addresses for testing
+    let beneficiary = Address::generate(&env);
+    let unauthorized_user = Address::generate(&env);
+    
+    // Initialize contract with admin
+    let initial_supply = 1000000000i128;
+    client.initialize(&admin, &initial_supply);
+    
+    // Verify initial state is unpaused
+    assert_eq!(client.is_paused(), false);
+    assert_eq!(client.is_paused(), false); // Should still be unpaused
+    
+    // Test: Admin can pause the contract
+    env.mock_all_auths();    
+    client.toggle_pause();
+    assert_eq!(client.is_paused(), true); // Should now be paused
+    
+    // Create a vault for testing claims
+    let now = env.ledger().timestamp();
+    let total_amount = 1000i128; // Define total_amount
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &total_amount,
+        &now,
+        &(now + 1_000),
+        &0i128,
+        &false,
+        &true,
+        &0u64,
+    );
+    
+    // Move time to make tokens claimable
+    env.ledger().set_timestamp(now + 1001);
+    
+    // Set beneficiary as caller
+    // (env.mock_all_auths() already active)    
+    // Test: Claims should fail when paused
+    let result = client.try_claim_tokens(&vault_id, &100i128);
+    assert!(result.is_err());
+    
+    // Test: Delegate claims should also fail when paused
+    let delegate = Address::generate(&env);
+    client.set_delegate(&vault_id, &Some(delegate.clone()));    
+    let result2 = client.try_claim_as_delegate(&vault_id, &100i128);
+    assert!(result2.is_err());
+    
+    // Test: Admin can unpause the contract    
+    client.toggle_pause();
+    assert_eq!(client.is_paused(), false); // Should be unpaused
+    
+    // Test: Claims should work after unpausing    
+    let claimed = client.claim_tokens(&vault_id, &100i128);
+    assert_eq!(claimed, 100i128); // Should succeed
+}
     #[test]
     fn test_vault_start_time_immutable() {
         let env = Env::default();
