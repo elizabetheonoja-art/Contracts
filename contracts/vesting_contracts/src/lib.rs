@@ -80,8 +80,8 @@ pub struct VaultCreated {
     pub title: String,
 }
 
-mod factory;
-pub use factory::{VestingFactory, VestingFactoryClient};
+// mod factory;
+// pub use factory::{VestingFactory, VestingFactoryClient};
 
 #[contract]
 pub struct VestingContract;
