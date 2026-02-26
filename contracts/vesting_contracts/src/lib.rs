@@ -318,8 +318,10 @@ impl VestingContract {
             );
         }
 
-        env.events()
-            .publish(Symbol::new(&env, "ContractDeprecated"), v2_contract_address);
+        env.events().publish(
+            (Symbol::new(&env, "ContractDeprecated"),),
+            v2_contract_address,
+        );
 
         migrated
     }
