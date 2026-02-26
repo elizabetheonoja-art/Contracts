@@ -5,6 +5,9 @@ members = ["contracts/vesting-vault"]
 [workspace.dependencies]
 soroban-sdk = "22.0.0"
 
+[patch.crates-io]
+keccak = { path = "vendor/keccak-0.1.5" }
+
 [profile.release]
 opt-level = "z"
 overflow-checks = true
