@@ -1,4 +1,4 @@
-name: Grant Smart Contract Tests
+name: Smart Contracts CI
 
 on:
   push:
@@ -56,4 +56,6 @@ jobs:
           cargo build --target wasm32-unknown-unknown --release
 
       - name: Run Unit Tests
-        run: cargo test
+        run: |
+          cargo test --workspace
+          cargo test --all-features
