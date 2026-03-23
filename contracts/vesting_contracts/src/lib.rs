@@ -276,6 +276,23 @@ impl VestingContract {
         Self::get_vault_internal(&env, vault_id)
     }
 
+    pub fn get_user_vaults(env: Env, user: Address) -> Vec<u64> {
+        env.storage().instance().get(&DataKey::UserVaults(user)).unwrap_or(Vec::new(&env))
+    }
+
+    pub fn get_voting_power(env: Env, user: Address) -> i128 {
+        let vault_ids = Self::get_user_vaults(env.clone(), user);
+        let mut total_power: i128 = 0;
+        for id in vault_ids.iter() {
+            let vault = Self::get_vault_internal(&env, id);
+            let balance = vault.total_amount - vault.released_amount;
+            // Irrevocable tokens have 100% voting power, Revocable have 50%
+            let weight = if vault.is_irrevocable { 100 } else { 50 };
+            total_power += (balance * weight) / 100;
+        }
+        total_power
+    }
+
     // --- Internal Helpers ---
 
     fn require_admin(env: &Env) {

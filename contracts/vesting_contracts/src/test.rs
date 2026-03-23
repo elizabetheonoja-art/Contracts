@@ -155,3 +155,37 @@ fn test_batch_operations() {
     assert_eq!(ids.get(0).unwrap(), 1);
     assert_eq!(ids.get(1).unwrap(), 2);
 }
+
+#[test]
+fn test_voting_power() {
+    let (env, _, client, _, _) = setup();
+    let beneficiary = Address::generate(&env);
+    let now = env.ledger().timestamp();
+    
+    // Irrevocable vault: 1000 tokens (100% weight = 1000 power)
+    client.create_vault_full(
+        &beneficiary,
+        &1000i128,
+        &now,
+        &(now + 1000),
+        &0i128,
+        &false, // is_revocable = false => is_irrevocable = true
+        &false,
+        &0u64,
+    );
+    
+    // Revocable vault: 1000 tokens (50% weight = 500 power)
+    client.create_vault_full(
+        &beneficiary,
+        &1000i128,
+        &now,
+        &(now + 1000),
+        &0i128,
+        &true, // is_revocable = true => is_irrevocable = false
+        &false,
+        &0u64,
+    );
+    
+    // Total power should be 1000 + 500 = 1500
+    assert_eq!(client.get_voting_power(&beneficiary), 1500);
+}
