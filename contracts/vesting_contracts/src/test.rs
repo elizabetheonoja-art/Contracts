@@ -285,3 +285,49 @@ fn test_vesting_acceleration() {
     client.accelerate_all_schedules(&100);
     assert_eq!(client.get_claimable_amount(&vault_id), 1000);
 }
+
+#[test]
+fn test_slashing() {
+    let (env, _, client, _admin, token) = setup();
+    let beneficiary = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    let token_client = token::Client::new(&env, &token);
+    let now = env.ledger().timestamp();
+    
+    // 1000 tokens over 1000 seconds
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &1000i128,
+        &now,
+        &(now + 1000),
+        &0i128,
+        &true,
+        &false,
+        &0u64,
+    );
+    
+    // Jump to T=400
+    env.ledger().set_timestamp(now + 400);
+    assert_eq!(client.get_claimable_amount(&vault_id), 400);
+    
+    // Slash!
+    client.slash_unvested_balance(&vault_id, &treasury);
+    
+    // Treasury should have received 600 (remaining unvested)
+    assert_eq!(token_client.balance(&treasury), 600);
+    
+    // Beneficiary should still have 400 vested
+    assert_eq!(client.get_claimable_amount(&vault_id), 400);
+    
+    // vault.total_amount should be 400
+    let vault = client.get_vault(&vault_id);
+    assert_eq!(vault.total_amount, 400);
+    
+    // Jump to T=1000, claimable should NOT increase
+    env.ledger().set_timestamp(now + 1000);
+    assert_eq!(client.get_claimable_amount(&vault_id), 400);
+    
+    // Claim 400
+    client.claim_tokens(&vault_id, &400i128);
+    assert_eq!(token_client.balance(&beneficiary), 400);
+}

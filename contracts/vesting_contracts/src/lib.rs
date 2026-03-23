@@ -342,6 +342,40 @@ impl VestingContract {
         env.storage().instance().set(&DataKey::GlobalAccelerationPct, &percentage);
     }
 
+    pub fn slash_unvested_balance(env: Env, vault_id: u64, treasury: Address) {
+        Self::require_admin(&env);
+        let mut vault = Self::get_vault_internal(&env, vault_id);
+        
+        let vested = Self::calculate_claimable(&env, vault_id, &vault);
+        let unvested = vault.total_amount - vested;
+        
+        if unvested <= 0 { panic!("Nothing to slash"); }
+        
+        // The slashed tokens are taken from the vault's total capacity
+        vault.total_amount = vested;
+        // Effectively stop the clock for this vault
+        vault.end_time = env.ledger().timestamp();
+        vault.step_duration = 0;
+        
+        // Reset milestones to prevent future unlocks from a reduced total
+        if env.storage().instance().has(&DataKey::VaultMilestones(vault_id)) {
+            env.storage().instance().remove(&DataKey::VaultMilestones(vault_id));
+        }
+        
+        env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
+        
+        // Update global tracking
+        let total_shares: i128 = env.storage().instance().get(&DataKey::TotalShares).unwrap_or(0);
+        env.storage().instance().set(&DataKey::TotalShares, &(total_shares - unvested));
+        
+        // Transfer to community treasury
+        let token: Address = env.storage().instance().get(&DataKey::Token).expect("Token not set");
+        token::Client::new(&env, &token).transfer(&env.current_contract_address(), &treasury, &unvested);
+        
+        // Emit event
+        env.events().publish((Symbol::new(&env, "slash"), vault_id), (vested, unvested, treasury));
+    }
+
     // --- Internal Helpers ---
 
     fn require_admin(env: &Env) {
