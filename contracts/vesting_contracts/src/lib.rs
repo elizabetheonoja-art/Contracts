@@ -30,6 +30,8 @@ pub enum DataKey {
     TotalShares,
     TotalStaked,
     StakingContract,
+    VotingDelegate(Address),
+    DelegatedBeneficiaries(Address),
 }
 
 #[contracttype]
@@ -281,16 +283,56 @@ impl VestingContract {
     }
 
     pub fn get_voting_power(env: Env, user: Address) -> i128 {
-        let vault_ids = Self::get_user_vaults(env.clone(), user);
-        let mut total_power: i128 = 0;
-        for id in vault_ids.iter() {
-            let vault = Self::get_vault_internal(&env, id);
-            let balance = vault.total_amount - vault.released_amount;
-            // Irrevocable tokens have 100% voting power, Revocable have 50%
-            let weight = if vault.is_irrevocable { 100 } else { 50 };
-            total_power += (balance * weight) / 100;
+        // If this user has delegated their power to someone else, they have 0
+        if env.storage().instance().has(&DataKey::VotingDelegate(user.clone())) {
+            return 0;
         }
+
+        let mut total_power = Self::calculate_user_own_power(&env, &user);
+        
+        // Add power from others who delegated to this user
+        let delegators: Vec<Address> = env.storage().instance().get(&DataKey::DelegatedBeneficiaries(user)).unwrap_or(vec![&env]);
+        for delegator in delegators.iter() {
+            total_power += Self::calculate_user_own_power(&env, &delegator);
+        }
+        
         total_power
+    }
+
+    pub fn delegate_voting_power(env: Env, beneficiary: Address, representative: Address) {
+        beneficiary.require_auth();
+        
+        // 1. Get current representative if any
+        let old_representative: Option<Address> = env.storage().instance().get(&DataKey::VotingDelegate(beneficiary.clone()));
+        
+        // 2. If same as before, do nothing
+        if let Some(ref old) = old_representative {
+            if old == &representative {
+                return;
+            }
+            
+            // Remove from old representative's list
+            let mut old_list: Vec<Address> = env.storage().instance().get(&DataKey::DelegatedBeneficiaries(old.clone())).unwrap_or(vec![&env]);
+            if let Some(idx) = old_list.first_index_of(&beneficiary) {
+                old_list.remove(idx);
+                env.storage().instance().set(&DataKey::DelegatedBeneficiaries(old.clone()), &old_list);
+            }
+        }
+        
+        // 3. Update to new representative
+        // If representative is beneficiary itself, it means undelegate
+        if beneficiary == representative {
+            env.storage().instance().remove(&DataKey::VotingDelegate(beneficiary.clone()));
+        } else {
+            env.storage().instance().set(&DataKey::VotingDelegate(beneficiary.clone()), &representative);
+            
+            // Add to new representative's list
+            let mut new_list: Vec<Address> = env.storage().instance().get(&DataKey::DelegatedBeneficiaries(representative.clone())).unwrap_or(vec![&env]);
+            if !new_list.contains(&beneficiary) {
+                new_list.push_back(beneficiary.clone());
+                env.storage().instance().set(&DataKey::DelegatedBeneficiaries(representative), &new_list);
+            }
+        }
     }
 
     // --- Internal Helpers ---
@@ -396,6 +438,18 @@ impl VestingContract {
         let mut vaults: Vec<u64> = env.storage().instance().get(&DataKey::UserVaults(user.clone())).unwrap_or(vec![env]);
         vaults.push_back(id);
         env.storage().instance().set(&DataKey::UserVaults(user.clone()), &vaults);
+    }
+
+    fn calculate_user_own_power(env: &Env, user: &Address) -> i128 {
+        let vault_ids = env.storage().instance().get(&DataKey::UserVaults(user.clone())).unwrap_or(vec![env]);
+        let mut total_power: i128 = 0;
+        for id in vault_ids.iter() {
+            let vault = Self::get_vault_internal(env, id);
+            let balance = vault.total_amount - vault.released_amount;
+            let weight = if vault.is_irrevocable { 100 } else { 50 };
+            total_power += (balance * weight) / 100;
+        }
+        total_power
     }
 
     fn calculate_claimable(env: &Env, id: u64, vault: &Vault) -> i128 {
