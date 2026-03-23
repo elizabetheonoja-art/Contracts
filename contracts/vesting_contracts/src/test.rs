@@ -248,3 +248,40 @@ fn test_delegated_voting_power() {
     assert_eq!(client.get_voting_power(&beneficiary_a), 1000);
     assert_eq!(client.get_voting_power(&representative), 500); // Only B left
 }
+
+#[test]
+fn test_vesting_acceleration() {
+    let (env, _, client, _admin, _) = setup();
+    let beneficiary = Address::generate(&env);
+    let now = env.ledger().timestamp();
+    
+    // 1000 tokens over 1000 seconds
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &1000i128,
+        &now,
+        &(now + 1000),
+        &0i128,
+        &true,
+        &false,
+        &0u64,
+    );
+    
+    // Fast forward halfway to check baseline
+    env.ledger().set_timestamp(now + 250);
+    assert_eq!(client.get_claimable_amount(&vault_id), 250);
+    
+    // Accelerate by 25% (Shift = 250)
+    client.accelerate_all_schedules(&25);
+    // At T=250, effective is 500
+    assert_eq!(client.get_claimable_amount(&vault_id), 500);
+    
+    // Accelerate by 50% (Shift = 500)
+    client.accelerate_all_schedules(&50);
+    // At T=250, effective is 750
+    assert_eq!(client.get_claimable_amount(&vault_id), 750);
+    
+    // Accelerate by 100%
+    client.accelerate_all_schedules(&100);
+    assert_eq!(client.get_claimable_amount(&vault_id), 1000);
+}

@@ -32,6 +32,7 @@ pub enum DataKey {
     StakingContract,
     VotingDelegate(Address),
     DelegatedBeneficiaries(Address),
+    GlobalAccelerationPct,
 }
 
 #[contracttype]
@@ -335,6 +336,12 @@ impl VestingContract {
         }
     }
 
+    pub fn accelerate_all_schedules(env: Env, percentage: u32) {
+        Self::require_admin(&env);
+        if percentage > 100 { panic!("Percentage must be between 0 and 100"); }
+        env.storage().instance().set(&DataKey::GlobalAccelerationPct, &percentage);
+    }
+
     // --- Internal Helpers ---
 
     fn require_admin(env: &Env) {
@@ -462,11 +469,18 @@ impl VestingContract {
             if pct > 100 { pct = 100; }
             (vault.total_amount * pct as i128) / 100
         } else {
-            let now = env.ledger().timestamp();
+            let mut now = env.ledger().timestamp();
+            let accel_pct: u32 = env.storage().instance().get(&DataKey::GlobalAccelerationPct).unwrap_or(0);
+            
+            let duration = (vault.end_time - vault.start_time) as i128;
+            if accel_pct > 0 {
+                let shift = (duration * accel_pct as i128 / 100) as u64;
+                now += shift;
+            }
+
             if now <= vault.start_time { return 0; }
             if now >= vault.end_time { return vault.total_amount; }
             
-            let duration = (vault.end_time - vault.start_time) as i128;
             let elapsed = (now - vault.start_time) as i128;
             
             if vault.step_duration > 0 {
